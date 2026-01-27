@@ -1,17 +1,17 @@
 # Cashew
 
-A batteries-included dev environment bootstrap for Claude-powered, multi-agent development with Docker.
+A batteries-included dev environment bootstrap for Claude skills + commands, with multi-agent workflows and Docker isolation.
 
-Cashew gives you a single `dev` command to manage worktrees, sessions, and agents. Every worktree gets its own isolated Docker stack, its own session, and—by default—its own Pi agent.
+Cashew gives you a single `dev` command to manage worktrees, sessions, and agents. It ships Claude skills/commands for setup, but you can run any agent. Defaults are tuned for Claude (project orchestration) and Pi (long-running implementation).
 
 ## What Cashew Does (Quick Tour)
 
 - **Worktree-first workflows**: each feature branch becomes a directory (`~/projects/<repo>/<worktree>`).
 - **Automatic agent sessions**:
-  - Worktree sessions auto-start **`pi`**.
+  - Worktree sessions auto-start **`pi`** (great for long-running implementation loops).
   - Non-worktree repos auto-start **`claude --dangerously-skip-permissions`**.
 - **Resume anything**: sessions are persistent, so agents are resumable at any time.
-- **Infinite agents per worktree**: create additional sub-sessions like `dev repo/feature/claude`, `dev repo/feature/pi`, or `dev repo/feature/tests`.
+- **Infinite agents per worktree**: create additional sub-sessions like `dev repo/feature/claude`, `dev repo/feature/pi`, or `dev repo/feature/tests` (any agent, any time).
 - **Full Docker isolation**: each worktree runs isolated containers (no shared DBs, no port clashes).
 
 ## Setup
@@ -46,7 +46,12 @@ That's it. Claude handles the rest.
 
 ## How the `dev` Tool Works
 
-`dev` is the control plane for projects, worktrees, and agent sessions.
+`dev` is the control plane for projects, worktrees, and agent sessions. It works with any agent, but the defaults assume:
+
+- **Claude** runs at `~/projects` (hub) and in repo roots for orchestration.
+- **Pi** runs in worktrees for long-running implementation (often connected to Codex).
+
+Use `dev hub/claude` to keep a global Claude orchestrator in your projects folder, and `dev <repo>` to start Claude at a repo root when it isn't a worktree repo.
 
 - **New sessions** are created in **tmux**.
 - **Existing Zellij sessions** are still discovered and attached for backward compatibility.
@@ -62,12 +67,16 @@ dev hub/claude                   # Claude session at projects root
 dev new myapp git@github.com:user/myapp   # Clone with worktree structure
 dev myapp                        # Open main worktree (pi auto-starts)
 dev myapp/main/claude            # Claude sub-session in main
+
+# Regular (non-worktree) repo
+dev myscript                     # Claude auto-starts in repo root
 ```
 
 ### Worktree → Agent Mapping
 
-- `dev <repo>/<worktree>` → **Pi auto-starts**
-- `dev <repo>` (non-worktree repo) → **Claude auto-starts**
+- `dev <repo>/<worktree>` → **Pi auto-starts** (implementation agent, often Codex-backed)
+- `dev <repo>` (non-worktree repo) → **Claude auto-starts** (orchestrator)
+- `dev hub/claude` → **Claude in ~/Projects** for cross-repo coordination
 
 You can always create more sessions:
 
