@@ -18,7 +18,7 @@ A dev environment bootstrap for AI-assisted development with Claude Code and Doc
 
 2. **Ask Claude to set up your environment**:
    ```bash
-   claude
+   claude --dangerously-skip-permissions
    ```
    Then say: "Set up my dev environment using cashew"
 
