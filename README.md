@@ -6,15 +6,18 @@ A dev-environment bootstrap that ships Claude skills/commands plus a `dev` sessi
 
 **Observed**
 - This repo contains: a `dev` CLI, Claude skills/commands, and a Pi extension.
-- `dev` creates **tmux** sessions by default and still attaches to **existing Zellij** sessions for compatibility.
-- Worktrees are stored at `~/projects/<repo>/<worktree>`; bare repos live at `~/projects/<repo>/.bare`.
+- `dev` creates **tmux** sessions by default.
+- Worktrees are stored at `~/Projects/<repo>/<worktree>`; bare repos live at `~/Projects/<repo>/.bare`.
 
 **Assumed (defaults, not rules)**
 - Claude is used for orchestration at the projects root and repo roots.
+- Claude can send messages to Pi workers running in worktrees.
 - Pi is used for long-running implementation work inside worktrees (often Codex-backed).
 
 **Desired (intended workflow)**
 - One repo → many worktrees → many resumable agents.
+- Claude skills/commands handle repo bootstrap and session orchestration.
+- Claude can message Pi workers in worktrees, so humans usually only use `dev` to reattach when they want to inspect or take over a long-running context.
 - Fast context switching with predictable session names.
 
 **Unknown**
@@ -26,7 +29,7 @@ If any of the assumptions are wrong for you, keep the tool and change the defaul
 
 Cashew gives you a single `dev` command to manage:
 - **Worktrees** (git worktree add/remove).
-- **Sessions** (tmux by default, Zellij attach for legacy sessions).
+- **Sessions** (tmux by default).
 - **Agent defaults** (Claude at repo roots; Pi in worktrees).
 
 What it does **not** do:
@@ -42,7 +45,7 @@ Checksum: **`dev` is a session/worktree manager with sane defaults; it is not a 
 
 ```bash
 dev                              # List projects and sessions
-dev hub                          # Session at ~/projects
+dev hub                          # Session at ~/Projects
 dev hub/claude                   # Claude at projects root
 
 dev new myapp git@github.com:user/myapp   # Clone with worktree structure
@@ -101,7 +104,7 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    ```bash
    npm install -g @mariozechner/pi-coding-agent
    mkdir -p ~/.pi/agent/extensions
-   cp ~/projects/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/
+   cp ~/Projects/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/
    ```
    This enables: `dev send-pi`, `dev pi-status`, `dev queue-status`.
 
@@ -128,7 +131,7 @@ If you do not use Docker, remove this from your workflow. Nothing in `dev` depen
 - We don’t ship screenshots yet. If you want them, define which views matter:
   - `dev` list output
   - a Pi session attached to a worktree
-  - a Claude hub session at `~/projects`
+  - a Claude hub session at `~/Projects`
 
 If you want me to add screenshots, tell me which host and which terminal theme to capture.
 
