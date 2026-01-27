@@ -2,6 +2,20 @@
 
 A dev-environment bootstrap that ships Claude skills/commands plus a `dev` session/worktree manager. It does **not** enforce a specific agent; it sets defaults that are easy to override.
 
+## Example prompts (human → Claude)
+
+1. **Setup Cashew**
+   - “Set up my dev environment using cashew.”
+
+2. **Create a worktree to fix a README**
+   - “Clone `git@github.com:user/repo.git` with cashew and make a worktree named `fix-readme` for a README update.”
+
+3. **Ask Claude to message a Pi worker**
+   - “Send the `fix-readme` worktree Pi agent instructions on how to improve the README.”
+
+4. **Merge and push when done**
+   - “Merge the `fix-readme` worktree into `main` and push.”
+
 ## Orientation (read this first)
 
 **Observed**
