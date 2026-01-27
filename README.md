@@ -41,7 +41,9 @@ If any of the assumptions are wrong for you, keep the tool and change the defaul
 
 ## What Cashew Actually Does
 
-Cashew gives you a single `dev` command to manage:
+Cashew ships Claude skills/commands that orchestrate worktrees, sessions, and agent defaults. The `dev` command is the session switchboard: agents use it to create/attach sessions, and humans mostly use it to rejoin long-running contexts.
+
+`dev` still manages:
 - **Worktrees** (git worktree add/remove).
 - **Sessions** (tmux by default).
 - **Agent defaults** (Claude at repo roots; Pi in worktrees).
