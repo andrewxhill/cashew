@@ -8,13 +8,13 @@ A dev-environment bootstrap that ships Claude skills/commands plus a `dev` sessi
    - “Set up my dev environment using cashew.”
 
 2. **Create a worktree to fix a README**
-   - “Clone `git@github.com:user/repo.git` with cashew and make a worktree named `fix-readme` for a README update.”
+   - “Clone `git@github.com:user/repo.git` and make a `fix-readme` worktree.”
 
 3. **Ask Claude to message a Pi worker**
-   - “Send the `fix-readme` worktree Pi agent instructions on how to improve the README.”
+   - “Tell the README agent how to improve the README.”
 
 4. **Merge and push when done**
-   - “Merge the `fix-readme` worktree into `main` and push.”
+   - “Merge `fix-readme` into `main` and push.”
 
 ## Orientation (read this first)
 
