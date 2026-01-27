@@ -5,7 +5,7 @@ A dev-environment bootstrap that ships Claude skills/commands plus a `dev` sessi
 ## Example prompts (human → Claude)
 
 1. **Setup Cashew**
-   - “Set up my dev environment using cashew.”
+   - “Use ./claude/commands/setup.md to set up my dev environment.”
 
 2. **Create a worktree to fix a README**
    - “Clone `git@github.com:user/repo.git` and make a `fix-readme` worktree.”
