@@ -132,7 +132,7 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    ```bash
    claude --dangerously-skip-permissions
    ```
-   Then say: “Set up my dev environment using cashew”.
+   Then say: “Use ./claude/commands/setup.md to set up my dev environment.”
 
    Claude will:
    - Ask for your projects folder name
