@@ -59,21 +59,50 @@ What it does **not** do:
 
 Checksum: **`dev` is a session/worktree manager with sane defaults; it is not a framework.**
 
-## Quick Tour
+## Operational workflows (agent-first)
 
-### Start here
+### 1) Multiple agents, one repo, zero interference
+
+**Observed**
+- Each worktree has its own session and agent.
+
+**Workflow**
+- Claude creates worktrees and assigns Pi to each worktree.
+- Humans rarely touch `dev` unless they need to inspect a session.
+
+Example (what Claude runs):
+```bash
+dev new myapp git@github.com:user/myapp
+dev wt myapp feature-auth
+```
+
+### 2) Drop into any sub-agent’s context when needed
+
+**Observed**
+- Sessions are addressable by `repo/worktree/sub`.
+
+**Workflow**
+- Use `dev` only when you need to interrupt, inspect, or manually assist.
+
+Examples (human reattach):
+```bash
+dev myapp/feature-auth            # Reattach to Pi in that worktree
+dev myapp/feature-auth/claude      # Reattach to a Claude helper
+dev myapp/feature-auth/tests       # Reattach to long-running tests
+```
+
+### 3) Remote persistence (resume at any time)
+
+**Observed**
+- Sessions persist across SSH disconnects.
+
+**Workflow**
+- SSH in, list sessions, reattach to any agent context.
 
 ```bash
-dev                              # List projects and sessions
-dev hub                          # Session at ~/Projects
-dev hub/claude                   # Claude at projects root
-
-dev new myapp git@github.com:user/myapp   # Clone with worktree structure
-dev myapp                        # Open main worktree (pi auto-starts)
-dev myapp/main/claude            # Claude in main worktree
-
-# Regular (non-worktree) repo
-dev myscript                     # Claude auto-starts in repo root
+ssh myserver
+dev                              # List running contexts
+dev myapp/feature-auth            # Resume Pi agent
 ```
 
 ### Worktree → agent mapping (default, not enforced)
@@ -81,14 +110,6 @@ dev myscript                     # Claude auto-starts in repo root
 - `dev <repo>/<worktree>` → **Pi auto-starts** (implementation agent)
 - `dev <repo>` (non-worktree repo) → **Claude auto-starts** (orchestrator)
 - `dev hub/claude` → **Claude** for cross-repo coordination
-
-You can create unlimited sub-sessions:
-
-```bash
-dev myapp/feature-auth/pi         # Additional Pi agent
-dev myapp/feature-auth/claude      # Claude helper
-dev myapp/feature-auth/tests       # Long-running tests
-```
 
 ## How Sessions Map to Names
 
