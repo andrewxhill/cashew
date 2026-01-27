@@ -1,11 +1,11 @@
 #!/bin/bash
-# dev - Project session manager for Zellij (with git worktree support)
+# dev - Project session manager with git worktree support
 #
 # Structure supported:
 #   ~/projects/<repo>/<worktree>/     - git worktrees
 #   ~/projects/<repo>/                - regular repos
 #
-# Session naming uses "_" separator (Zellij doesn't allow "/"):
+# Session naming uses "_" separator (internal session names don't allow "/"):
 #   repo_worktree_sub  maps to  repo/worktree/sub in commands
 #
 # Usage:
@@ -24,7 +24,7 @@ PROJECTS_DIR="$HOME/projects"  # Set by /setup skill during installation
 if [ -d "$HOME/Projects" ]; then
     PROJECTS_DIR="$HOME/Projects"
 fi
-SEP="_"  # Session name separator (Zellij doesn't allow /, must be URL-safe)
+SEP="_"  # Session name separator (internal session names don't allow /)
 
 # Colors
 BOLD='\033[1m'
@@ -325,7 +325,7 @@ kill_session() {
 }
 
 kill_all_sessions() {
-    echo "Killing all Zellij sessions..."
+    echo "Killing all sessions..."
     zellij kill-all-sessions
 }
 
@@ -1064,7 +1064,7 @@ case "${1:-}" in
         echo ""
         echo "Session naming:"
         echo "  You type: repo/worktree/sub"
-        echo "  Zellij sees: repo_worktree_sub"
+        echo "  Internal session name: repo_worktree_sub"
             ;;
     *)
         attach_session "$1"

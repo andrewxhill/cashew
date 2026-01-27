@@ -1,8 +1,8 @@
 # Dev - Project Session Manager
 
-Use the `dev` command to manage Zellij sessions for projects in `~/projects/`.
+Use the `dev` command to manage project sessions in `~/projects/`.
 
-**Note:** Session names use `_` internally (Zellij limitation), but you always type `/` in commands.
+**Note:** Session names use `_` internally, but you always type `/` in commands.
 
 ## Quick Reference
 
@@ -16,7 +16,7 @@ dev <repo>/<worktree>/<sub>      # Open sub-session (e.g., claude, server, tests
 dev new <repo> <git-url>         # Clone repo with worktree structure
 dev wt <repo> <branch> [base]    # Add a new worktree for a branch
 dev kill <session>               # Kill a specific session
-dev kill-all                     # Kill all Zellij sessions
+dev kill-all                     # Kill all sessions
 ```
 
 ## Project Structure
@@ -39,8 +39,8 @@ dev kill-all                     # Kill all Zellij sessions
 
 ## Session Naming Convention
 
-| You Type | Zellij Session | Use Case |
-|----------|----------------|----------|
+| You Type | Session Name | Use Case |
+|----------|--------------|----------|
 | `dev hub` | `hub` | Root session at ~/projects |
 | `dev hub/claude` | `hub_claude` | Claude sub-session at root |
 | `dev myapp` | `myapp` | Regular repo main session |
@@ -79,15 +79,7 @@ dev myapp/feature-auth/claude # claude sub-session
 ssh myserver
 dev                          # see what's running
 dev myapp/main/claude        # reconnect to Claude session
-# Ctrl+o d to detach
 ```
-
-## Zellij Keybindings
-
-- `Ctrl+o d` - Detach from session (keeps it running)
-- `Ctrl+o w` - Session manager
-- `Ctrl+p n` - New pane
-- `Ctrl+t n` - New tab
 
 ## Worktree Workflow
 

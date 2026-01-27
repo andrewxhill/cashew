@@ -2,7 +2,7 @@
 
 ## Project Session Management
 
-This environment uses `dev` - a Zellij session manager for projects in `~/projects/`.
+This environment uses `dev` - a session manager for projects in `~/projects/`.
 
 **Key concepts:**
 - Projects use git worktrees: `~/projects/<repo>/<worktree>/` (e.g., `~/projects/replay/main/`)

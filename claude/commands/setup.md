@@ -26,7 +26,7 @@ Based on the OS, install the required tools:
 command -v brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install core tools
-brew install zellij git gh
+brew install git gh
 
 # Install Docker Desktop
 brew install --cask docker
@@ -36,10 +36,6 @@ brew install --cask docker
 ```bash
 sudo apt-get update
 sudo apt-get install -y git curl
-
-# Zellij
-curl -fsSL https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz
-sudo mv zellij /usr/local/bin/
 
 # GitHub CLI
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -118,7 +114,6 @@ sudo systemctl enable ssh && sudo systemctl start ssh
 ## Step 8: Verify Installation
 
 ```bash
-zellij --version
 docker --version
 git --version
 gh --version

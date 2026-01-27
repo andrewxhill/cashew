@@ -1,11 +1,11 @@
 # Cashew
 
-A dev environment bootstrap for AI-assisted development with Claude Code, Zellij, and Docker.
+A dev environment bootstrap for AI-assisted development with Claude Code and Docker.
 
 ## Philosophy
 
 - **Worktree-based development**: Each feature branch gets its own directory via git worktrees
-- **Session persistence**: Zellij sessions survive disconnects - SSH in, detach, reconnect anytime
+- **Session persistence**: Sessions survive disconnects - SSH in, detach, reconnect anytime
 - **Full Docker isolation**: Every worktree runs its own containers - no shared databases, no migration conflicts
 - **Claude orchestration**: Main branch Claude manages the project, feature branch Claudes focus on implementation
 
@@ -24,7 +24,7 @@ A dev environment bootstrap for AI-assisted development with Claude Code, Zellij
 
    Claude will:
    - Ask what you want to call your projects folder
-   - Install Zellij, Docker, Git, GitHub CLI, and `jq`
+   - Install Docker, Git, GitHub CLI, and `jq`
    - Configure SSH keys for GitHub
    - Install the `dev` command
    - Set up Claude skills and context
@@ -68,10 +68,6 @@ dev myapp/main/claude
 ```bash
 dev kill myapp/feature-auth/claude   # Kill specific session
 dev kill-all                          # Kill all sessions
-
-# Zellij shortcuts
-Ctrl+o d    # Detach (session keeps running)
-Ctrl+o w    # Session manager
 ```
 
 ## Project Structure
