@@ -26,7 +26,7 @@ Based on the OS, install the required tools:
 command -v brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install core tools
-brew install git gh
+brew install git gh tmux
 
 # Install Docker Desktop
 brew install --cask docker
@@ -35,7 +35,7 @@ brew install --cask docker
 ### Linux (Debian/Ubuntu)
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl
+sudo apt-get install -y git curl tmux
 
 # GitHub CLI
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -117,6 +117,7 @@ sudo systemctl enable ssh && sudo systemctl start ssh
 docker --version
 git --version
 gh --version
+tmux -V
 dev --help
 ssh -T git@github.com
 ```

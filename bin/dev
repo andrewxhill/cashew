@@ -35,7 +35,7 @@ YELLOW='\033[33m'
 MAGENTA='\033[35m'
 RESET='\033[0m'
 
-# Convert path-style (repo/wt/sub) to session name (repo--wt--sub)
+# Convert path-style (repo/wt/sub) to session name (repo_wt_sub)
 to_session_name() {
     echo "$1" | sed "s|/|${SEP}|g"
 }
@@ -49,8 +49,8 @@ list_projects() {
     echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
     echo ""
 
-    # Get all zellij sessions
-    sessions=$(zellij list-sessions 2>/dev/null | grep -v "^$" || true)
+    # Get all tmux sessions
+    sessions=$(tmux list-sessions -F "#S" 2>/dev/null | grep -v "^$" || true)
 
     # Show hub session(s) first
     hub_sessions=$(echo "$sessions" | grep "^hub" || true)
@@ -224,8 +224,33 @@ attach_session() {
     echo -e "Directory: ${CYAN}$target_dir${RESET}"
     echo -e "Session: ${GREEN}$display_name${RESET}"
 
-    # Use attach --create to handle both existing and new sessions
-    zellij attach -c "$session_name"
+    local auto_command=()
+    if [ -n "$sub" ]; then
+        case "$sub" in
+            pi)
+                auto_command=(pi)
+                ;;
+            claude)
+                auto_command=(claude --dangerously-skip-permissions)
+                ;;
+        esac
+    else
+        if [ -d "$repo_dir/.bare" ]; then
+            auto_command=(pi)
+        else
+            auto_command=(claude --dangerously-skip-permissions)
+        fi
+    fi
+
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        tmux attach -t "$session_name"
+    else
+        if [ ${#auto_command[@]} -gt 0 ]; then
+            tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
+        else
+            tmux new-session -s "$session_name" -c "$target_dir"
+        fi
+    fi
 }
 
 new_project() {
@@ -273,10 +298,11 @@ new_project() {
     echo "  └── main/      (default branch worktree)"
     echo ""
     echo "Commands:"
-    echo "  dev $name                    # open main worktree"
+    echo "  dev $name                    # open main worktree (pi auto-starts)"
+    echo "  dev $name/main/pi            # pi sub-session"
     echo "  dev $name/main/claude        # claude sub-session"
     echo "  dev wt $name feature-x       # add feature-x worktree"
-    echo "  dev $name/feature-x          # open that worktree"
+    echo "  dev $name/feature-x          # open that worktree (pi auto-starts)"
 }
 
 add_worktree() {
@@ -310,10 +336,23 @@ add_worktree() {
         git --git-dir=.bare worktree add -b "$branch" "$branch" "$base"
     fi
 
+    local session_name="${repo}${SEP}${branch}"
+    local started_pi=0
+    if command -v tmux >/dev/null 2>&1 && command -v pi >/dev/null 2>&1; then
+        if ! tmux has-session -t "$session_name" 2>/dev/null; then
+            tmux new-session -d -s "$session_name" -c "$repo_dir/$branch" pi
+            started_pi=1
+        fi
+    fi
+
     echo ""
     echo -e "${GREEN}Worktree created!${RESET}"
-    echo "  dev $repo/$branch            # open it"
-    echo "  dev $repo/$branch/claude     # with claude sub-session"
+    if [ "$started_pi" -eq 1 ]; then
+        echo "  pi started in session: dev $repo/$branch"
+    fi
+    echo "  dev $repo/$branch            # open it (pi auto-starts)"
+    echo "  dev $repo/$branch/pi         # pi sub-session"
+    echo "  dev $repo/$branch/claude     # claude sub-session"
 }
 
 kill_session() {
@@ -321,12 +360,12 @@ kill_session() {
     # Convert path-style to session name
     local session=$(to_session_name "$input")
     echo "Killing session: $session"
-    zellij kill-session "$session"
+    tmux kill-session -t "$session"
 }
 
 kill_all_sessions() {
     echo "Killing all sessions..."
-    zellij kill-all-sessions
+    tmux kill-server
 }
 
 send_pi() {
@@ -987,7 +1026,27 @@ hub_session() {
     echo -e "Directory: ${CYAN}$target_dir${RESET}"
     echo -e "Session: ${GREEN}$display_name${RESET}"
 
-    zellij attach -c "$session_name"
+    local auto_command=()
+    if [ -n "$sub" ]; then
+        case "$sub" in
+            pi)
+                auto_command=(pi)
+                ;;
+            claude)
+                auto_command=(claude --dangerously-skip-permissions)
+                ;;
+        esac
+    fi
+
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        tmux attach -t "$session_name"
+    else
+        if [ ${#auto_command[@]} -gt 0 ]; then
+            tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
+        else
+            tmux new-session -s "$session_name" -c "$target_dir"
+        fi
+    fi
 }
 
 # Main

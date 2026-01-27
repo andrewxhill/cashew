@@ -1,8 +1,10 @@
 # Dev - Project Session Manager
 
-Use the `dev` command to manage project sessions in `~/projects/`.
+Use the `dev` command to manage tmux-backed project sessions in `~/projects/`.
 
 **Note:** Session names use `_` internally, but you always type `/` in commands.
+
+**Auto-start:** New worktree sessions start `pi` automatically; non-worktree repo sessions start `claude --dangerously-skip-permissions`.
 
 ## Quick Reference
 

@@ -24,7 +24,7 @@ A dev environment bootstrap for AI-assisted development with Claude Code and Doc
 
    Claude will:
    - Ask what you want to call your projects folder
-   - Install Docker, Git, GitHub CLI, and `jq`
+   - Install Docker, Git, GitHub CLI, `jq`, and tmux
    - Configure SSH keys for GitHub
    - Install the `dev` command
    - Set up Claude skills and context
@@ -42,6 +42,8 @@ That's it. Claude handles the rest.
 ## Usage
 
 Once set up:
+
+New sessions auto-start agents: worktree sessions run `pi`, while non-worktree repo sessions run `claude --dangerously-skip-permissions`.
 
 ```bash
 dev                              # List all projects and sessions
