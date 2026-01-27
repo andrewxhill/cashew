@@ -1,0 +1,1072 @@
+#!/bin/bash
+# dev - Project session manager for Zellij (with git worktree support)
+#
+# Structure supported:
+#   ~/projects/<repo>/<worktree>/     - git worktrees
+#   ~/projects/<repo>/                - regular repos
+#
+# Session naming uses "_" separator (Zellij doesn't allow "/"):
+#   repo_worktree_sub  maps to  repo/worktree/sub in commands
+#
+# Usage:
+#   dev                              - List all projects and sessions
+#   dev <repo>                       - Attach to repo's main/default session
+#   dev <repo>/<worktree>            - Attach to a specific worktree session
+#   dev <repo>/<worktree>/<sub>      - Attach to sub-session (e.g., repo/main/claude)
+#   dev hub                          - Attach to hub session at ~/projects root
+#   dev hub/<sub>                    - Attach to hub sub-session (e.g., hub/claude)
+#   dev new <repo> <url>             - Clone repo as bare + create main worktree
+#   dev wt <repo> <branch> [base]    - Add a worktree for a branch
+#   dev kill <session>               - Kill a specific session
+#   dev kill-all                     - Kill all sessions
+
+PROJECTS_DIR="$HOME/projects"  # Set by /setup skill during installation
+if [ -d "$HOME/Projects" ]; then
+    PROJECTS_DIR="$HOME/Projects"
+fi
+SEP="_"  # Session name separator (Zellij doesn't allow /, must be URL-safe)
+
+# Colors
+BOLD='\033[1m'
+DIM='\033[2m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+MAGENTA='\033[35m'
+RESET='\033[0m'
+
+# Convert path-style (repo/wt/sub) to session name (repo--wt--sub)
+to_session_name() {
+    echo "$1" | sed "s|/|${SEP}|g"
+}
+
+# Convert session name back to path-style for display
+to_display_name() {
+    echo "$1" | sed "s|${SEP}|/|g"
+}
+
+list_projects() {
+    echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
+    echo ""
+
+    # Get all zellij sessions
+    sessions=$(zellij list-sessions 2>/dev/null | grep -v "^$" || true)
+
+    # Show hub session(s) first
+    hub_sessions=$(echo "$sessions" | grep "^hub" || true)
+    if [ -n "$hub_sessions" ]; then
+        echo -e "  ${GREEN}●${RESET} ${BOLD}hub${RESET} ${DIM}($PROJECTS_DIR root)${RESET}"
+        echo "$hub_sessions" | while read -r sess; do
+            sess_name=$(echo "$sess" | awk '{print $1}')
+            if [[ "$sess_name" == "hub" ]]; then
+                echo -e "      └─ main ${DIM}(dev hub)${RESET}"
+            else
+                sub="${sess_name#hub${SEP}}"
+                echo -e "      └─ ${sub} ${DIM}(dev hub/$sub)${RESET}"
+            fi
+        done
+    else
+        echo -e "  ${DIM}○${RESET} hub ${DIM}(dev hub to start)${RESET}"
+    fi
+    echo ""
+
+    for dir in "$PROJECTS_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        project=$(basename "$dir")
+        [[ "$project" == "dev" ]] && continue
+
+        # Check if this is a worktree-based repo
+        if [ -d "$dir/.bare" ]; then
+            echo -e "  ${MAGENTA}◆${RESET} ${BOLD}$project${RESET} ${DIM}(worktrees)${RESET}"
+
+            # List worktrees
+            for wt_dir in "$dir"/*/; do
+                [ -d "$wt_dir" ] || continue
+                wt=$(basename "$wt_dir")
+                [[ "$wt" == ".bare" ]] && continue
+
+                # Check for sessions (using -- separator)
+                session_prefix="${project}${SEP}${wt}"
+                wt_sessions=$(echo "$sessions" | grep "^${session_prefix}" || true)
+                if [ -n "$wt_sessions" ]; then
+                    echo -e "      ${GREEN}●${RESET} ${CYAN}$wt${RESET}"
+                    echo "$wt_sessions" | while read -r sess; do
+                        sess_name=$(echo "$sess" | awk '{print $1}')
+                        display=$(to_display_name "$sess_name")
+                        if [[ "$sess_name" == "$session_prefix" ]]; then
+                            echo -e "          └─ main ${DIM}(dev $project/$wt)${RESET}"
+                        else
+                            sub="${sess_name#${session_prefix}${SEP}}"
+                            echo -e "          └─ ${sub} ${DIM}(dev $project/$wt/$sub)${RESET}"
+                        fi
+                    done
+                else
+                    echo -e "      ${DIM}○${RESET} ${DIM}$wt${RESET}"
+                fi
+            done
+        else
+            # Regular repo
+            session_prefix="${project}"
+            project_sessions=$(echo "$sessions" | grep "^${session_prefix}" || true)
+            if [ -n "$project_sessions" ]; then
+                echo -e "  ${GREEN}●${RESET} ${BOLD}$project${RESET}"
+                echo "$project_sessions" | while read -r sess; do
+                    sess_name=$(echo "$sess" | awk '{print $1}')
+                    if [[ "$sess_name" == "$project" ]]; then
+                        echo -e "      └─ main ${DIM}(dev $project)${RESET}"
+                    else
+                        sub="${sess_name#${project}${SEP}}"
+                        echo -e "      └─ ${sub} ${DIM}(dev $project/$sub)${RESET}"
+                    fi
+                done
+            else
+                echo -e "  ${DIM}○${RESET} $project"
+            fi
+        fi
+    done
+
+    echo ""
+    echo -e "${BOLD}Active sessions:${RESET}"
+    if [ -n "$sessions" ]; then
+        echo "$sessions" | while read -r line; do
+            sess=$(echo "$line" | awk '{print $1}')
+            display=$(to_display_name "$sess")
+            echo -e "  ${YELLOW}→${RESET} $display ${DIM}[$sess]${RESET}"
+        done
+    else
+        echo -e "  ${DIM}(none)${RESET}"
+    fi
+
+    echo ""
+    echo -e "${DIM}Usage: dev hub | dev <repo>[/<worktree>][/<sub>] | dev new <repo> <url>${RESET}"
+}
+
+attach_session() {
+    local input="$1"
+
+    # Parse input: repo/worktree/sub or repo/sub or repo
+    IFS='/' read -ra parts <<< "$input"
+
+    local repo="${parts[0]}"
+    local worktree=""
+    local sub=""
+    local session_name=""
+    local target_dir=""
+
+    local repo_dir="$PROJECTS_DIR/$repo"
+
+    if [ ! -d "$repo_dir" ]; then
+        echo "Project not found: $repo_dir"
+        echo "Create it with: dev new $repo <git-url>"
+        exit 1
+    fi
+
+    # Determine if worktree repo
+    if [ -d "$repo_dir/.bare" ]; then
+        # Worktree-based repo
+        if [ ${#parts[@]} -ge 2 ]; then
+            worktree="${parts[1]}"
+            target_dir="$repo_dir/$worktree"
+
+            if [ ! -d "$target_dir" ]; then
+                echo "Worktree not found: $worktree"
+                echo "Available worktrees:"
+                for d in "$repo_dir"/*/; do
+                    [ "$(basename "$d")" != ".bare" ] && echo "  - $(basename "$d")"
+                done
+                echo ""
+                echo "Create with: dev wt $repo <branch>"
+                exit 1
+            fi
+
+            session_name="${repo}${SEP}${worktree}"
+
+            if [ ${#parts[@]} -ge 3 ]; then
+                sub="${parts[2]}"
+                session_name="${repo}${SEP}${worktree}${SEP}${sub}"
+            fi
+        else
+            # Default to 'main' worktree if exists
+            if [ -d "$repo_dir/main" ]; then
+                worktree="main"
+                target_dir="$repo_dir/main"
+                session_name="${repo}${SEP}main"
+            else
+                # Pick first available worktree
+                for d in "$repo_dir"/*/; do
+                    if [ "$(basename "$d")" != ".bare" ]; then
+                        worktree=$(basename "$d")
+                        target_dir="$d"
+                        session_name="${repo}${SEP}${worktree}"
+                        break
+                    fi
+                done
+            fi
+        fi
+    else
+        # Regular repo
+        target_dir="$repo_dir"
+        session_name="$repo"
+
+        if [ ${#parts[@]} -ge 2 ]; then
+            sub="${parts[1]}"
+            session_name="${repo}${SEP}${sub}"
+        fi
+    fi
+
+    if [ -z "$target_dir" ] || [ ! -d "$target_dir" ]; then
+        echo "Could not determine target directory"
+        exit 1
+    fi
+
+    cd "$target_dir"
+    local display_name=$(to_display_name "$session_name")
+    echo -e "Directory: ${CYAN}$target_dir${RESET}"
+    echo -e "Session: ${GREEN}$display_name${RESET}"
+
+    # Use attach --create to handle both existing and new sessions
+    zellij attach -c "$session_name"
+}
+
+new_project() {
+    local name="$1"
+    local url="$2"
+    local project_dir="$PROJECTS_DIR/$name"
+
+    if [ -d "$project_dir" ]; then
+        echo "Project already exists: $project_dir"
+        exit 1
+    fi
+
+    if [ -z "$url" ]; then
+        echo "Usage: dev new <project-name> <git-url>"
+        exit 1
+    fi
+
+    echo "Setting up worktree-based repo..."
+    mkdir -p "$project_dir"
+
+    # Clone as bare repo
+    echo "Cloning bare repo..."
+    git clone --bare "$url" "$project_dir/.bare"
+
+    # Configure the bare repo
+    cd "$project_dir/.bare"
+    git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    git fetch origin
+
+    # Create main worktree
+    echo "Creating 'main' worktree..."
+    cd "$project_dir"
+
+    # Determine default branch
+    default_branch=$(git --git-dir=.bare symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+
+    git --git-dir=.bare worktree add main "$default_branch"
+
+    echo ""
+    echo -e "${GREEN}Project created!${RESET}"
+    echo ""
+    echo "Structure:"
+    echo "  $PROJECTS_DIR/$name/"
+    echo "  ├── .bare/     (git data)"
+    echo "  └── main/      (default branch worktree)"
+    echo ""
+    echo "Commands:"
+    echo "  dev $name                    # open main worktree"
+    echo "  dev $name/main/claude        # claude sub-session"
+    echo "  dev wt $name feature-x       # add feature-x worktree"
+    echo "  dev $name/feature-x          # open that worktree"
+}
+
+add_worktree() {
+    local repo="$1"
+    local branch="$2"
+    local base="${3:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+
+    if [ ! -d "$repo_dir/.bare" ]; then
+        echo "Not a worktree-based repo: $repo"
+        echo "Use 'dev new $repo <url>' to create one"
+        exit 1
+    fi
+
+    if [ -z "$branch" ]; then
+        echo "Usage: dev wt <repo> <branch> [base-branch]"
+        exit 1
+    fi
+
+    cd "$repo_dir"
+
+    # Fetch latest
+    git --git-dir=.bare fetch origin
+
+    # Check if branch exists remotely
+    if git --git-dir=.bare show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+        echo "Creating worktree from existing remote branch: $branch"
+        git --git-dir=.bare worktree add "$branch" "$branch"
+    else
+        echo "Creating new branch '$branch' from '$base'"
+        git --git-dir=.bare worktree add -b "$branch" "$branch" "$base"
+    fi
+
+    echo ""
+    echo -e "${GREEN}Worktree created!${RESET}"
+    echo "  dev $repo/$branch            # open it"
+    echo "  dev $repo/$branch/claude     # with claude sub-session"
+}
+
+kill_session() {
+    local input="$1"
+    # Convert path-style to session name
+    local session=$(to_session_name "$input")
+    echo "Killing session: $session"
+    zellij kill-session "$session"
+}
+
+kill_all_sessions() {
+    echo "Killing all Zellij sessions..."
+    zellij kill-all-sessions
+}
+
+send_pi() {
+    local input="$1"
+    shift
+    local mode="followUp"
+    local message=""
+
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --steer|-s|--enter|-e)
+                mode="steer"
+                shift
+                ;;
+            --follow-up|-f|--queue|-q)
+                mode="followUp"
+                shift
+                ;;
+            *)
+                if [ -z "$message" ]; then
+                    message="$1"
+                else
+                    message="$message $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$input" ] || [ -z "$message" ]; then
+        echo "Usage: dev send-pi <session> [--enter|--steer] <message>"
+        echo ""
+        echo "Send a message to a pi agent's queue."
+        echo ""
+        echo "Options:"
+        echo "  --follow-up, -f  Queue for after agent finishes (default, like Alt+Enter)"
+        echo "  --queue, -q      Alias for --follow-up"
+        echo "  --steer, -s      Interrupt agent mid-run (like Enter)"
+        echo "  --enter, -e      Alias for --steer"
+        echo ""
+        echo "Examples:"
+        echo "  dev send-pi replay/feature 'focus on the error handling next'"
+        echo "  dev send-pi replay/main --enter 'stop and explain what you are doing'"
+        echo ""
+        echo "Note: Requires the message-queue extension in ~/.pi/agent/extensions/"
+        exit 1
+    fi
+
+    # Convert session path to directory path, then to queue file
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+    local target_dir=""
+    local sub=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+        sub="${parts[2]:-}"
+    else
+        target_dir="$repo_dir"
+        sub="${parts[1]:-}"
+    fi
+
+    if [ ! -d "$target_dir" ]; then
+        echo "Directory not found: $target_dir"
+        exit 1
+    fi
+
+    if [ -n "$sub" ]; then
+        local sub_dir="$target_dir/$sub"
+        local dot_sub_dir="$target_dir/.${sub}"
+        local chosen=""
+
+        for candidate in "$sub_dir" "$dot_sub_dir"; do
+            if [ -d "$candidate" ]; then
+                local safe_candidate
+                safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+                local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
+                if [ -d "$session_candidate" ]; then
+                    chosen="$candidate"
+                    break
+                fi
+            fi
+        done
+
+        if [ -n "$chosen" ]; then
+            target_dir="$chosen"
+        fi
+    fi
+
+    # Convert path to queue file format (same as extension - lowercase)
+    local safe_path
+    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+    local queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+
+    # Ensure queue directory exists
+    mkdir -p "$HOME/.pi/queues"
+
+    # Append message as JSONL (safe JSON encoding)
+    local json_line
+    json_line=$(jq -nc --arg message "$message" --arg mode "$mode" '{message: $message, mode: $mode}')
+    if ! echo "$json_line" | jq -e . >/dev/null 2>&1; then
+        echo "ERROR: message contains characters that break JSON encoding" >&2
+        exit 1
+    fi
+    echo "$json_line" >> "$queue_file"
+
+    local display_name
+    display_name=$(to_display_name "$(to_session_name "$input")")
+    echo -e "Queued for ${GREEN}${display_name}${RESET} (${mode}): $message"
+}
+
+pi_status() {
+    local input="$1"
+    shift
+
+    local messages_count=""
+    local show_tools=0
+    local show_errors=0
+    local show_cost=0
+    local follow=0
+    local since=""
+    local show_summary=1
+    local view_flags=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --messages|-m)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --messages"
+                    exit 1
+                fi
+                messages_count="$2"
+                shift 2
+                view_flags=1
+                ;;
+            --tools|-t)
+                show_tools=1
+                shift
+                view_flags=1
+                ;;
+            --errors|-e)
+                show_errors=1
+                shift
+                view_flags=1
+                ;;
+            --cost|-c)
+                show_cost=1
+                shift
+                view_flags=1
+                ;;
+            --since)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --since"
+                    exit 1
+                fi
+                since="$2"
+                shift 2
+                ;;
+            --follow|-f)
+                follow=1
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev pi-status <session> [options]"
+        echo ""
+        echo "Show recent activity from a pi agent's session."
+        echo ""
+        echo "Options:"
+        echo "  --messages, -m <n>  Show last n user/assistant messages"
+        echo "  --tools, -t         Show recent tool calls"
+        echo "  --errors, -e        Show errors/failures only"
+        echo "  --cost, -c          Show token usage and cost totals"
+        echo "  --since <window>    Limit to recent activity (e.g., 10m, 2h, 1d)"
+        echo "  --follow, -f        Tail new activity (like tail -f)"
+        exit 1
+    fi
+
+    if [ "$view_flags" -eq 1 ]; then
+        show_summary=0
+    fi
+
+    local cutoff_ms=0
+    if [ -n "$since" ]; then
+        if [[ "$since" =~ ^([0-9]+)([smhd]?)$ ]]; then
+            local amount="${BASH_REMATCH[1]}"
+            local unit="${BASH_REMATCH[2]}"
+            local seconds=0
+            case "$unit" in
+                ""|"s") seconds="$amount" ;;
+                "m") seconds=$((amount * 60)) ;;
+                "h") seconds=$((amount * 3600)) ;;
+                "d") seconds=$((amount * 86400)) ;;
+                *)
+                    echo "Invalid --since value: $since (use Ns, Nm, Nh, Nd)"
+                    exit 1
+                    ;;
+            esac
+            local now_s
+            now_s=$(date +%s)
+            cutoff_ms=$(((now_s - seconds) * 1000))
+        else
+            echo "Invalid --since value: $since (use Ns, Nm, Nh, Nd)"
+            exit 1
+        fi
+    fi
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+    local target_dir=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+    else
+        target_dir="$repo_dir"
+    fi
+
+    if [ ! -d "$target_dir" ]; then
+        echo "Directory not found: $target_dir"
+        exit 1
+    fi
+
+    local safe_path
+    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+    local session_dir="$HOME/.pi/agent/sessions/--${safe_path}--"
+
+    if [ ! -d "$session_dir" ]; then
+        safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
+        session_dir="$HOME/.pi/agent/sessions/--${safe_path}--"
+    fi
+
+    if [ ! -d "$session_dir" ]; then
+        echo "No pi sessions found for: $input"
+        echo ""
+        echo "Available sessions:"
+        ls -1 "$HOME/.pi/agent/sessions/" 2>/dev/null | head -10
+        exit 1
+    fi
+
+    local session_file
+    session_file=$(ls "$session_dir"/*.jsonl 2>/dev/null | sort | tail -1)
+    if [ -z "$session_file" ]; then
+        echo "No session files found"
+        exit 1
+    fi
+
+    format_time() {
+        local ts_ms="$1"
+        if [ -z "$ts_ms" ] || [ "$ts_ms" = "null" ]; then
+            echo "unknown"
+            return
+        fi
+        local ts_s=$((ts_ms / 1000))
+        date -r "$ts_s" "+%Y-%m-%d %H:%M:%S"
+    }
+
+    echo -e "${BOLD}Session:${RESET} $input"
+    echo -e "${DIM}File: $session_file${RESET}"
+    if [ -n "$since" ]; then
+        echo -e "${DIM}Window: last $since${RESET}"
+    fi
+    echo ""
+
+    if [ "$show_summary" -eq 1 ]; then
+        echo -e "${BOLD}Summary:${RESET}"
+        local last_message_json
+        last_message_json=$(jq -c --argjson cutoff "$cutoff_ms" 'select(.type=="message") | select((.message.timestamp // 0) >= $cutoff)' "$session_file" | tail -1)
+
+        if [ -z "$last_message_json" ]; then
+            echo "  No activity"
+        else
+            local last_role
+            local last_ts_ms
+            local last_text
+            local last_status
+            last_role=$(echo "$last_message_json" | jq -r '.message.role // "unknown"')
+            last_ts_ms=$(echo "$last_message_json" | jq -r '.message.timestamp // empty')
+            last_text=$(echo "$last_message_json" | jq -r '
+                def text_of:
+                  if (.message.content | type) == "string" then .message.content
+                  else ([.message.content[]? | select(.type=="text") | .text] | join(" ")) end;
+                text_of // ""')
+            if [ -z "$last_text" ]; then
+                last_text="(no text)"
+            fi
+
+            case "$last_role" in
+                assistant)
+                    local stop_reason
+                    local error_msg
+                    stop_reason=$(echo "$last_message_json" | jq -r '.message.stopReason // empty')
+                    error_msg=$(echo "$last_message_json" | jq -r '.message.errorMessage // empty')
+                    last_status="assistant"
+                    if [ -n "$stop_reason" ]; then
+                        last_status="assistant ($stop_reason)"
+                    fi
+                    if [ -n "$error_msg" ]; then
+                        last_status="assistant error: $error_msg"
+                    fi
+                    ;;
+                toolResult)
+                    local tool_name
+                    local is_error
+                    tool_name=$(echo "$last_message_json" | jq -r '.message.toolName // "tool"')
+                    is_error=$(echo "$last_message_json" | jq -r '.message.isError // false')
+                    if [ "$is_error" = "true" ]; then
+                        last_status="tool error: $tool_name"
+                    else
+                        last_status="tool result: $tool_name"
+                    fi
+                    ;;
+                bashExecution)
+                    local exit_code
+                    local cancelled
+                    exit_code=$(echo "$last_message_json" | jq -r '.message.exitCode // empty')
+                    cancelled=$(echo "$last_message_json" | jq -r '.message.cancelled // false')
+                    if [ "$cancelled" = "true" ]; then
+                        last_status="bash cancelled"
+                    elif [ -n "$exit_code" ]; then
+                        last_status="bash exit $exit_code"
+                    else
+                        last_status="bash execution"
+                    fi
+                    ;;
+                user)
+                    last_status="user"
+                    ;;
+                *)
+                    last_status="$last_role"
+                    ;;
+            esac
+
+            echo "  Last message: [$(format_time "$last_ts_ms")] $last_role"
+            echo "  Status: $last_status"
+            echo "  Text: $last_text"
+
+            local last_assistant_json
+            last_assistant_json=$(jq -c --argjson cutoff "$cutoff_ms" 'select(.type=="message" and .message.role=="assistant") | select((.message.timestamp // 0) >= $cutoff)' "$session_file" | tail -1)
+            if [ -n "$last_assistant_json" ]; then
+                local total_tokens
+                local input_tokens
+                local output_tokens
+                local cost_total
+                total_tokens=$(echo "$last_assistant_json" | jq -r '.message.usage.totalTokens // 0')
+                input_tokens=$(echo "$last_assistant_json" | jq -r '.message.usage.input // 0')
+                output_tokens=$(echo "$last_assistant_json" | jq -r '.message.usage.output // 0')
+                cost_total=$(echo "$last_assistant_json" | jq -r '.message.usage.cost.total // 0')
+                printf "  Tokens: %s (in %s / out %s)\n" "$total_tokens" "$input_tokens" "$output_tokens"
+                printf "  Cost: $%.4f\n" "$cost_total"
+            fi
+        fi
+        echo ""
+    fi
+
+    if [ -n "$messages_count" ]; then
+        echo -e "${BOLD}Messages (last $messages_count):${RESET}"
+        local message_lines
+        message_lines=$(jq -r --argjson cutoff "$cutoff_ms" '
+            def text_of:
+              if (.message.content | type) == "string" then .message.content
+              else ([.message.content[]? | select(.type=="text") | .text] | join(" ")) end;
+            select(.type=="message")
+            | select((.message.timestamp // 0) >= $cutoff)
+            | select(.message.role=="user" or .message.role=="assistant")
+            | (.message.timestamp|tostring) + "\t" + .message.role + "\t" + (text_of // "")' "$session_file" | tail -n "$messages_count")
+
+        if [ -z "$message_lines" ]; then
+            echo "  (none)"
+        else
+            echo "$message_lines" | while IFS=$'\t' read -r ts role text; do
+                if [ -z "$text" ]; then
+                    text="(no text)"
+                fi
+                echo "  [$(format_time "$ts")] $role: $text"
+            done
+        fi
+        echo ""
+    fi
+
+    if [ "$show_tools" -eq 1 ]; then
+        echo -e "${BOLD}Tool calls:${RESET}"
+        local tool_lines
+        tool_lines=$(jq -r --argjson cutoff "$cutoff_ms" '
+            select(.type=="message" and .message.role=="assistant")
+            | select((.message.timestamp // 0) >= $cutoff)
+            | . as $m
+            | $m.message.content[]?
+            | select(.type=="toolCall")
+            | ($m.message.timestamp|tostring) + "\t" + .name' "$session_file" | tail -n 20)
+
+        if [ -z "$tool_lines" ]; then
+            echo "  (none)"
+        else
+            echo "$tool_lines" | while IFS=$'\t' read -r ts name; do
+                echo "  [$(format_time "$ts")] $name"
+            done
+        fi
+        echo ""
+    fi
+
+    if [ "$show_errors" -eq 1 ]; then
+        echo -e "${BOLD}Errors:${RESET}"
+        local error_lines
+        error_lines=$(jq -r --argjson cutoff "$cutoff_ms" '
+            select(.type=="message")
+            | select((.message.timestamp // 0) >= $cutoff)
+            | if .message.role=="toolResult" and (.message.isError==true) then
+                (.message.timestamp|tostring) + "\ttoolResult\t" + (.message.toolName // "tool")
+              elif .message.role=="assistant" and ((.message.stopReason=="error") or (.message.errorMessage // "") != "") then
+                (.message.timestamp|tostring) + "\tassistant\t" + (.message.errorMessage // .message.stopReason // "error")
+              elif .message.role=="bashExecution" and ((.message.cancelled==true) or ((.message.exitCode // 0) != 0)) then
+                (.message.timestamp|tostring) + "\tbash\t" + (if .message.cancelled==true then "cancelled" else "exit " + ((.message.exitCode // 0)|tostring) end)
+              else empty end' "$session_file" | tail -n 20)
+
+        if [ -z "$error_lines" ]; then
+            echo "  (none)"
+        else
+            echo "$error_lines" | while IFS=$'\t' read -r ts kind detail; do
+                echo "  [$(format_time "$ts")] $kind: $detail"
+            done
+        fi
+        echo ""
+    fi
+
+    if [ "$show_cost" -eq 1 ]; then
+        echo -e "${BOLD}Token usage:${RESET}"
+        local cost_json
+        cost_json=$(jq -s --argjson cutoff "$cutoff_ms" '
+            reduce (.[] | select(.type=="message" and .message.role=="assistant") | select((.message.timestamp // 0) >= $cutoff)) as $m
+              ({input:0, output:0, cacheRead:0, cacheWrite:0, totalTokens:0, costInput:0, costOutput:0, costCacheRead:0, costCacheWrite:0, costTotal:0};
+                .input += ($m.message.usage.input // 0)
+                | .output += ($m.message.usage.output // 0)
+                | .cacheRead += ($m.message.usage.cacheRead // 0)
+                | .cacheWrite += ($m.message.usage.cacheWrite // 0)
+                | .totalTokens += ($m.message.usage.totalTokens // 0)
+                | .costInput += ($m.message.usage.cost.input // 0)
+                | .costOutput += ($m.message.usage.cost.output // 0)
+                | .costCacheRead += ($m.message.usage.cost.cacheRead // 0)
+                | .costCacheWrite += ($m.message.usage.cost.cacheWrite // 0)
+                | .costTotal += ($m.message.usage.cost.total // 0)
+              )' "$session_file")
+
+        local total_tokens
+        local input_tokens
+        local output_tokens
+        local cache_read
+        local cache_write
+        local cost_total
+        total_tokens=$(echo "$cost_json" | jq -r '.totalTokens // 0')
+        input_tokens=$(echo "$cost_json" | jq -r '.input // 0')
+        output_tokens=$(echo "$cost_json" | jq -r '.output // 0')
+        cache_read=$(echo "$cost_json" | jq -r '.cacheRead // 0')
+        cache_write=$(echo "$cost_json" | jq -r '.cacheWrite // 0')
+        cost_total=$(echo "$cost_json" | jq -r '.costTotal // 0')
+
+        echo "  Total tokens: $total_tokens"
+        echo "  Input: $input_tokens | Output: $output_tokens"
+        echo "  Cache read: $cache_read | Cache write: $cache_write"
+        printf "  Cost total: $%.4f\n" "$cost_total"
+        echo ""
+    fi
+
+    if [ "$follow" -eq 1 ]; then
+        echo -e "${BOLD}Following:${RESET} $session_file"
+        echo -e "${DIM}(Ctrl+C to stop)${RESET}"
+        tail -f "$session_file" | while read -r line; do
+            local role
+            local ts_ms
+            local text
+            role=$(echo "$line" | jq -r 'select(.type=="message") | .message.role // empty' 2>/dev/null)
+            if [ -z "$role" ]; then
+                continue
+            fi
+            ts_ms=$(echo "$line" | jq -r '.message.timestamp // 0' 2>/dev/null)
+            if [ "$ts_ms" -lt "$cutoff_ms" ]; then
+                continue
+            fi
+            text=$(echo "$line" | jq -r '
+                def text_of:
+                  if (.message.content | type) == "string" then .message.content
+                  else ([.message.content[]? | select(.type=="text") | .text] | join(" ")) end;
+                text_of // ""' 2>/dev/null)
+            if [ -z "$text" ]; then
+                text="(no text)"
+            fi
+            echo "  [$(format_time "$ts_ms")] $role: $text"
+        done
+    fi
+}
+
+queue_status() {
+    local input="$1"
+    shift
+
+    local show_messages=0
+    local show_dead=0
+    local clear_queue=0
+    local clear_dead=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --messages|-m)
+                show_messages=1
+                shift
+                ;;
+            --dead-letter|-d)
+                show_dead=1
+                shift
+                ;;
+            --clear|-c)
+                clear_queue=1
+                shift
+                ;;
+            --clear-dead|--clear-dead-letter|-x)
+                clear_dead=1
+                shift
+                ;;
+            --clear-all|-a)
+                clear_queue=1
+                clear_dead=1
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev queue-status <session> [options]"
+        echo ""
+        echo "Show queue status for a pi agent."
+        echo ""
+        echo "Options:"
+        echo "  --messages, -m         Show pending queue messages"
+        echo "  --dead-letter, -d      Show dead-letter entries"
+        echo "  --clear, -c            Clear pending queue messages"
+        echo "  --clear-dead, -x       Clear dead-letter entries"
+        echo "  --clear-all, -a        Clear queue and dead-letter"
+        exit 1
+    fi
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+    local target_dir=""
+    local sub=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+        sub="${parts[2]:-}"
+    else
+        target_dir="$repo_dir"
+        sub="${parts[1]:-}"
+    fi
+
+    if [ ! -d "$target_dir" ]; then
+        echo "Directory not found: $target_dir"
+        exit 1
+    fi
+
+    if [ -n "$sub" ]; then
+        local sub_dir="$target_dir/$sub"
+        local dot_sub_dir="$target_dir/.${sub}"
+        local chosen=""
+
+        for candidate in "$sub_dir" "$dot_sub_dir"; do
+            if [ -d "$candidate" ]; then
+                local safe_candidate
+                safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+                local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
+                if [ -d "$session_candidate" ]; then
+                    chosen="$candidate"
+                    break
+                fi
+            fi
+        done
+
+        if [ -n "$chosen" ]; then
+            target_dir="$chosen"
+        fi
+    fi
+
+    local safe_path
+    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+    local queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+    local dead_file="$queue_file.dead-letter"
+
+    if [ "$clear_queue" -eq 1 ]; then
+        : > "$queue_file"
+        echo "Cleared queue: $queue_file"
+    fi
+    if [ "$clear_dead" -eq 1 ]; then
+        : > "$dead_file"
+        echo "Cleared dead-letter: $dead_file"
+    fi
+
+    local queue_size=0
+    local dead_size=0
+
+    if [ -f "$queue_file" ]; then
+        queue_size=$(wc -c < "$queue_file" | tr -d ' ')
+    fi
+    if [ -f "$dead_file" ]; then
+        dead_size=$(wc -c < "$dead_file" | tr -d ' ')
+    fi
+
+    echo -e "${BOLD}Queue:${RESET} $input"
+    echo -e "${DIM}File: $queue_file${RESET}"
+    echo -e "${DIM}Size: ${queue_size} bytes${RESET}"
+
+    if [ "$show_messages" -eq 1 ]; then
+        if [ ! -s "$queue_file" ]; then
+            echo "  (no pending messages)"
+        else
+            echo -e "${BOLD}Pending messages:${RESET}"
+            cat "$queue_file"
+        fi
+    fi
+
+    echo ""
+    echo -e "${DIM}Dead-letter: $dead_file${RESET}"
+    echo -e "${DIM}Dead-letter size: ${dead_size} bytes${RESET}"
+    if [ "$show_dead" -eq 1 ]; then
+        if [ ! -s "$dead_file" ]; then
+            echo "  (no dead-letter entries)"
+        else
+            echo -e "${BOLD}Dead-letter entries:${RESET}"
+            cat "$dead_file"
+        fi
+    fi
+}
+
+hub_session() {
+    local sub="$1"
+    local session_name="hub"
+    local target_dir="$PROJECTS_DIR"
+
+    if [ -n "$sub" ]; then
+        session_name="hub${SEP}${sub}"
+    fi
+
+    cd "$target_dir"
+    local display_name=$(to_display_name "$session_name")
+    echo -e "Directory: ${CYAN}$target_dir${RESET}"
+    echo -e "Session: ${GREEN}$display_name${RESET}"
+
+    zellij attach -c "$session_name"
+}
+
+# Main
+case "${1:-}" in
+    "")
+        list_projects
+        ;;
+    hub|hub/*)
+        # Extract sub-session if provided (hub/claude -> claude)
+        if [[ "$1" == "hub/"* ]]; then
+            sub="${1#hub/}"
+            hub_session "$sub"
+        else
+            hub_session ""
+        fi
+        ;;
+    "new")
+        new_project "$2" "$3"
+        ;;
+    "wt"|"worktree")
+        add_worktree "$2" "$3" "$4"
+        ;;
+    "kill")
+        if [ -z "$2" ]; then
+            echo "Usage: dev kill <session-name>"
+            exit 1
+        fi
+        kill_session "$2"
+        ;;
+    "kill-all")
+        kill_all_sessions
+        ;;
+    "send-pi")
+        send_pi "$2" "${@:3}"
+        ;;
+    "pi-status")
+        pi_status "${@:2}"
+        ;;
+    "queue-status")
+        queue_status "${@:2}"
+        ;;
+    "ls"|"list")
+        list_projects
+        ;;
+    "help"|"-h"|"--help")
+        echo "dev - Project session manager (with git worktree support)"
+        echo ""
+        echo "Commands:"
+        echo "  dev                           List projects and sessions"
+        echo "  dev hub                       Attach to hub session at ~/projects root"
+        echo "  dev hub/<sub>                 Hub sub-session (e.g., hub/claude)"
+        echo "  dev <repo>                    Attach to default worktree/session"
+        echo "  dev <repo>/<worktree>         Attach to specific worktree"
+        echo "  dev <repo>/<worktree>/<sub>   Attach to sub-session (e.g., claude)"
+        echo "  dev new <repo> <git-url>      Clone as worktree-based repo"
+        echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
+        echo "  dev kill <session>            Kill a session"
+        echo "  dev kill-all                  Kill all sessions"
+        echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
+        echo "  dev pi-status <session> [opts] Show recent pi agent activity"
+        echo "  dev queue-status <session> [opts] Inspect or clear queue files"
+        echo ""
+        echo "Examples:"
+        echo "  dev hub                       # root session at ~/projects"
+        echo "  dev hub/claude                # claude session at root"
+        echo "  dev new myapp git@github.com:user/myapp"
+        echo "  dev myapp                     # default (main) worktree"
+        echo "  dev myapp/main/claude         # claude session in main"
+        echo "  dev wt myapp feature-auth     # create feature branch worktree"
+        echo "  dev myapp/feature-auth        # open that worktree"
+        echo "  dev myapp/feature-auth/server # sub-session for dev server"
+        echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
+        echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
+        echo ""
+        echo "Session naming:"
+        echo "  You type: repo/worktree/sub"
+        echo "  Zellij sees: repo_worktree_sub"
+            ;;
+    *)
+        attach_session "$1"
+        ;;
+esac
