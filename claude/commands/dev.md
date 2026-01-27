@@ -6,6 +6,8 @@ Use the `dev` command to manage tmux-backed project sessions in `~/projects/`.
 
 **Auto-start:** New worktree sessions start `pi` automatically; non-worktree repo sessions start `claude --dangerously-skip-permissions`.
 
+**Compatibility:** New sessions are created in tmux, but existing Zellij sessions are still detected and attached.
+
 ## Quick Reference
 
 ```bash

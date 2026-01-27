@@ -45,6 +45,8 @@ Once set up:
 
 New sessions auto-start agents: worktree sessions run `pi`, while non-worktree repo sessions run `claude --dangerously-skip-permissions`.
 
+`dev` uses tmux for new sessions but will still attach to any existing Zellij sessions for backward compatibility.
+
 ```bash
 dev                              # List all projects and sessions
 dev hub                          # Hub session at ~/projects

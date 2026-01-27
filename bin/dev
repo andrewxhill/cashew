@@ -45,12 +45,56 @@ to_display_name() {
     echo "$1" | sed "s|${SEP}|/|g"
 }
 
+get_tmux_sessions() {
+    if ! command -v tmux >/dev/null 2>&1; then
+        return 0
+    fi
+
+    tmux list-sessions -F "#S" 2>/dev/null | grep -v "^$" || true
+}
+
+get_zellij_sessions() {
+    if ! command -v zellij >/dev/null 2>&1; then
+        return 0
+    fi
+
+    zellij list-sessions 2>/dev/null \
+        | sed -E 's/\x1b\[[0-9;]*m//g' \
+        | awk '{print $1}' \
+        | grep -v "^$" || true
+}
+
+get_all_sessions() {
+    printf "%s\n%s\n" "$(get_tmux_sessions)" "$(get_zellij_sessions)" \
+        | grep -v "^$" \
+        | awk '!seen[$0]++'
+}
+
+session_backend() {
+    local name="$1"
+
+    if command -v tmux >/dev/null 2>&1; then
+        if tmux has-session -t "$name" 2>/dev/null; then
+            echo "tmux"
+            return 0
+        fi
+    fi
+
+    if get_zellij_sessions | grep -Fxq "$name"; then
+        echo "zellij"
+        return 0
+    fi
+
+    echo ""
+    return 1
+}
+
 list_projects() {
     echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
     echo ""
 
-    # Get all tmux sessions
-    sessions=$(tmux list-sessions -F "#S" 2>/dev/null | grep -v "^$" || true)
+    # Get all sessions
+    sessions=$(get_all_sessions)
 
     # Show hub session(s) first
     hub_sessions=$(echo "$sessions" | grep "^hub" || true)
@@ -242,14 +286,23 @@ attach_session() {
         fi
     fi
 
-    if tmux has-session -t "$session_name" 2>/dev/null; then
+    local backend
+    backend=$(session_backend "$session_name")
+
+    if [ "$backend" = "tmux" ]; then
         tmux attach -t "$session_name"
+        return
+    fi
+
+    if [ "$backend" = "zellij" ]; then
+        zellij attach "$session_name"
+        return
+    fi
+
+    if [ ${#auto_command[@]} -gt 0 ]; then
+        tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
     else
-        if [ ${#auto_command[@]} -gt 0 ]; then
-            tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
-        else
-            tmux new-session -s "$session_name" -c "$target_dir"
-        fi
+        tmux new-session -s "$session_name" -c "$target_dir"
     fi
 }
 
@@ -339,7 +392,7 @@ add_worktree() {
     local session_name="${repo}${SEP}${branch}"
     local started_pi=0
     if command -v tmux >/dev/null 2>&1 && command -v pi >/dev/null 2>&1; then
-        if ! tmux has-session -t "$session_name" 2>/dev/null; then
+        if [ -z "$(session_backend "$session_name")" ]; then
             tmux new-session -d -s "$session_name" -c "$repo_dir/$branch" pi
             started_pi=1
         fi
@@ -360,12 +413,30 @@ kill_session() {
     # Convert path-style to session name
     local session=$(to_session_name "$input")
     echo "Killing session: $session"
-    tmux kill-session -t "$session"
+
+    local backend
+    backend=$(session_backend "$session")
+
+    if [ "$backend" = "tmux" ]; then
+        tmux kill-session -t "$session"
+        return
+    fi
+
+    if [ "$backend" = "zellij" ]; then
+        zellij kill-session "$session"
+        return
+    fi
+
+    echo "Session not found: $input"
+    exit 1
 }
 
 kill_all_sessions() {
     echo "Killing all sessions..."
-    tmux kill-server
+    tmux kill-server 2>/dev/null || true
+    if command -v zellij >/dev/null 2>&1; then
+        zellij kill-all-sessions 2>/dev/null || true
+    fi
 }
 
 send_pi() {
@@ -1038,14 +1109,23 @@ hub_session() {
         esac
     fi
 
-    if tmux has-session -t "$session_name" 2>/dev/null; then
+    local backend
+    backend=$(session_backend "$session_name")
+
+    if [ "$backend" = "tmux" ]; then
         tmux attach -t "$session_name"
+        return
+    fi
+
+    if [ "$backend" = "zellij" ]; then
+        zellij attach "$session_name"
+        return
+    fi
+
+    if [ ${#auto_command[@]} -gt 0 ]; then
+        tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
     else
-        if [ ${#auto_command[@]} -gt 0 ]; then
-            tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
-        else
-            tmux new-session -s "$session_name" -c "$target_dir"
-        fi
+        tmux new-session -s "$session_name" -c "$target_dir"
     fi
 }
 
