@@ -1,13 +1,18 @@
 # Cashew
 
-A dev environment bootstrap for AI-assisted development with Claude Code and Docker.
+A batteries-included dev environment bootstrap for Claude-powered, multi-agent development with Docker.
 
-## Philosophy
+Cashew gives you a single `dev` command to manage worktrees, sessions, and agents. Every worktree gets its own isolated Docker stack, its own session, and—by default—its own Pi agent.
 
-- **Worktree-based development**: Each feature branch gets its own directory via git worktrees
-- **Session persistence**: Sessions survive disconnects - SSH in, detach, reconnect anytime
-- **Full Docker isolation**: Every worktree runs its own containers - no shared databases, no migration conflicts
-- **Claude orchestration**: Main branch Claude manages the project, feature branch Claudes focus on implementation
+## What Cashew Does (Quick Tour)
+
+- **Worktree-first workflows**: each feature branch becomes a directory (`~/projects/<repo>/<worktree>`).
+- **Automatic agent sessions**:
+  - Worktree sessions auto-start **`pi`**.
+  - Non-worktree repos auto-start **`claude --dangerously-skip-permissions`**.
+- **Resume anything**: sessions are persistent, so agents are resumable at any time.
+- **Infinite agents per worktree**: create additional sub-sessions like `dev repo/feature/claude`, `dev repo/feature/pi`, or `dev repo/feature/tests`.
+- **Full Docker isolation**: each worktree runs isolated containers (no shared DBs, no port clashes).
 
 ## Setup
 
@@ -39,13 +44,15 @@ A dev environment bootstrap for AI-assisted development with Claude Code and Doc
 
 That's it. Claude handles the rest.
 
-## Usage
+## How the `dev` Tool Works
 
-Once set up:
+`dev` is the control plane for projects, worktrees, and agent sessions.
 
-New sessions auto-start agents: worktree sessions run `pi`, while non-worktree repo sessions run `claude --dangerously-skip-permissions`.
+- **New sessions** are created in **tmux**.
+- **Existing Zellij sessions** are still discovered and attached for backward compatibility.
+- **Session names** use `_` internally, but you type `/` in commands.
 
-`dev` uses tmux for new sessions but will still attach to any existing Zellij sessions for backward compatibility.
+### Common Commands
 
 ```bash
 dev                              # List all projects and sessions
@@ -53,15 +60,30 @@ dev hub                          # Hub session at ~/projects
 dev hub/claude                   # Claude session at projects root
 
 dev new myapp git@github.com:user/myapp   # Clone with worktree structure
-dev myapp                        # Open main worktree
-dev myapp/main/claude            # Claude sub-session
+dev myapp                        # Open main worktree (pi auto-starts)
+dev myapp/main/claude            # Claude sub-session in main
 ```
 
-### Feature Development
+### Worktree → Agent Mapping
+
+- `dev <repo>/<worktree>` → **Pi auto-starts**
+- `dev <repo>` (non-worktree repo) → **Claude auto-starts**
+
+You can always create more sessions:
+
+```bash
+dev myapp/feature-auth/pi         # Another Pi agent
+dev myapp/feature-auth/claude      # Claude in same worktree
+dev myapp/feature-auth/tests       # Long-running test session
+```
+
+### Feature Development Flow
 
 ```bash
 dev wt myapp feature-auth        # Create feature branch worktree
-dev myapp/feature-auth/claude    # Claude in the feature
+dev myapp/feature-auth            # Pi auto-starts in the feature
+
+dev myapp/feature-auth/claude     # Claude helper in the same worktree
 
 # When done, switch back to main Claude for merge
 dev myapp/main/claude
