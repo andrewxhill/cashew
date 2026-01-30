@@ -300,7 +300,11 @@ attach_session() {
     fi
 
     if [ ${#auto_command[@]} -gt 0 ]; then
-        tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
+        tmux new-session -d -s "$session_name" -c "$target_dir"
+        local cmd_line
+        cmd_line="${auto_command[*]}"
+        tmux send-keys -t "$session_name" "$cmd_line" C-m
+        tmux attach -t "$session_name"
     else
         tmux new-session -s "$session_name" -c "$target_dir"
     fi
@@ -1170,7 +1174,11 @@ hub_session() {
     fi
 
     if [ ${#auto_command[@]} -gt 0 ]; then
-        tmux new-session -s "$session_name" -c "$target_dir" "${auto_command[@]}"
+        tmux new-session -d -s "$session_name" -c "$target_dir"
+        local cmd_line
+        cmd_line="${auto_command[*]}"
+        tmux send-keys -t "$session_name" "$cmd_line" C-m
+        tmux attach -t "$session_name"
     else
         tmux new-session -s "$session_name" -c "$target_dir"
     fi
