@@ -439,6 +439,53 @@ kill_all_sessions() {
     fi
 }
 
+send_keys() {
+    local input="$1"
+    shift
+
+    if [ -z "$input" ] || [ $# -eq 0 ]; then
+        echo "Usage: dev send <session> <keys...>"
+        echo ""
+        echo "Send raw keys to a tmux session (like tmux send-keys)."
+        echo "Note: Enter/Return are sent as C-m."
+        echo ""
+        echo "Example:"
+        echo "  dev send replay/arb-admin-sse 'pi' Enter"
+        exit 1
+    fi
+
+    local session
+    session=$(to_session_name "$input")
+
+    local backend
+    backend=$(session_backend "$session")
+
+    if [ -z "$backend" ]; then
+        echo "Session not found: $input"
+        exit 1
+    fi
+
+    if [ "$backend" != "tmux" ]; then
+        echo "Session backend not supported for send: $backend"
+        exit 1
+    fi
+
+    local keys=()
+    local key
+    for key in "$@"; do
+        case "$key" in
+            Enter|enter|Return|RETURN)
+                keys+=("C-m")
+                ;;
+            *)
+                keys+=("$key")
+                ;;
+        esac
+    done
+
+    tmux send-keys -t "$session" "${keys[@]}"
+}
+
 send_pi() {
     local input="$1"
     shift
@@ -1159,6 +1206,9 @@ case "${1:-}" in
     "kill-all")
         kill_all_sessions
         ;;
+    "send")
+        send_keys "$2" "${@:3}"
+        ;;
     "send-pi")
         send_pi "$2" "${@:3}"
         ;;
@@ -1185,6 +1235,7 @@ case "${1:-}" in
         echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
         echo "  dev kill <session>            Kill a session"
         echo "  dev kill-all                  Kill all sessions"
+        echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
@@ -1198,6 +1249,7 @@ case "${1:-}" in
         echo "  dev wt myapp feature-auth     # create feature branch worktree"
         echo "  dev myapp/feature-auth        # open that worktree"
         echo "  dev myapp/feature-auth/server # sub-session for dev server"
+        echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
         echo ""

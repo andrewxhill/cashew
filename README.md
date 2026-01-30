@@ -147,7 +147,7 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    mkdir -p ~/.pi/agent/extensions
    cp ~/Projects/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/
    ```
-   This enables: `dev send-pi`, `dev pi-status`, `dev queue-status`.
+   This enables: `dev send`, `dev send-pi`, `dev pi-status`, `dev queue-status`.
 
 ## Docker Isolation (recommended, not enforced)
 
