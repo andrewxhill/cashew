@@ -13,8 +13,8 @@ A dev-environment bootstrap that ships Claude skills/commands plus a `dev` sessi
 3. **Ask Claude to message a Pi worker**
    - “Tell the README agent how to improve the README.”
 
-4. **Merge and push when done**
-   - “Merge `fix-readme` into `main` and push.”
+4. **Merge when done**
+   - “Merge `fix-readme` into `main`.”
 
 ## Orientation (read this first)
 

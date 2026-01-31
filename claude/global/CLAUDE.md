@@ -32,14 +32,14 @@ dev queue-status <session> -m
 
 ## Worktree Workflow
 
-Worktree branches are local by default. You do **not** need to push them to remote unless you want a PR or backup. Merge locally into `main` when ready.
+Worktree branches are local by default. You do **not** need to push them to remote to coordinate. Merge locally into `main` when ready.
 
 **Your role depends on which worktree you're in:**
 
 ### If you're in `main` worktree → You're the orchestrator
 - Explore codebase, plan features
 - Create worktrees for new features: `dev wt <repo> <feature>`
-- After features complete: merge locally (push only if needed), then full cleanup:
+- After features complete: merge locally, then full cleanup:
   ```bash
   # Merge the feature branch locally
   cd ~/projects/<repo>/main
@@ -58,7 +58,7 @@ Worktree branches are local by default. You do **not** need to push them to remo
 
 ### If you're in a feature worktree → You're the implementer
 - Focus on implementing the feature
-- Commit your work locally (push only if needed for PR/backup)
+- Commit your work locally
 - When done, tell the user it's ready for main Claude to merge
 - Don't worry about worktree cleanup - main handles that
 
@@ -168,5 +168,4 @@ When in doubt, use `docker ps` to see what's running and confirm with the user b
 
 ## Git Preferences
 
-- Always use SSH URLs for git remotes (e.g., `git@github.com:user/repo.git`)
 - Never use HTTPS URLs which require interactive authentication

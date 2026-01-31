@@ -97,7 +97,7 @@ dev myapp/main/pi            # reconnect to Pi session (preferred)
 
 ## Worktree Workflow
 
-Worktree branches are local by default. You do **not** need to push them to a remote just to coordinate. Merge by switching to `main` and merging locally (push only when you actually want a remote branch or PR).
+Worktree branches are local by default. You do **not** need to push them to a remote just to coordinate. Merge by switching to `main` and merging locally.
 
 **Main session = orchestrator**, feature sessions = focused implementation.
 
@@ -107,17 +107,15 @@ Worktree branches are local by default. You do **not** need to push them to a re
    dev wt <repo> <feature-branch>
    ```
 2. User switches to feature session: `dev <repo>/<feature>/pi`
-3. Feature Claude: implement, commit, push to remote
+3. Feature Claude: implement and commit locally
 
 ### Completing a feature
-1. Feature Claude: final commits, push, notify user it's ready
+1. Feature Claude: final commits, notify user it's ready
 2. User switches back: `dev <repo>/main/pi`
-3. Main Claude merges (or creates PR), then full cleanup:
+3. Main Claude merges locally, then full cleanup:
    ```bash
    # Merge the feature (local branch)
    git merge <feature-branch>
-   # Push only if you want a remote branch or PR
-   # gh pr create ...
 
    # Full cleanup (in this order):
    # 1. Tear down Docker environment (from worktree directory)
