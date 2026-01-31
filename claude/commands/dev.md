@@ -13,7 +13,6 @@ dev pi-status <session> --messages 1
 dev queue-status <session> -m
 ```
 
-**Compatibility:** New sessions are created in tmux, but existing Zellij sessions are still detected and attached.
 
 ## Quick Reference
 
