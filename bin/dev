@@ -12,7 +12,7 @@
 #   dev                              - List all projects and sessions
 #   dev <repo>                       - Attach to repo's main/default session
 #   dev <repo>/<worktree>            - Attach to a specific worktree session
-#   dev <repo>/<worktree>/<sub>      - Attach to sub-session (e.g., repo/main/claude)
+#   dev <repo>/<worktree>/<sub>      - Attach to sub-session (prefer /pi for worktrees)
 #   dev hub                          - Attach to hub session at ~/projects root
 #   dev hub/<sub>                    - Attach to hub sub-session (e.g., hub/claude)
 #   dev new <repo> <url>             - Clone repo as bare + create main worktree
@@ -357,6 +357,7 @@ new_project() {
     echo "Commands:"
     echo "  dev $name                    # open main worktree (pi auto-starts)"
     echo "  dev $name/main/pi            # pi sub-session"
+    echo "  dev $name/main/pi            # pi sub-session (preferred)"
     echo "  dev $name/main/claude        # claude sub-session"
     echo "  dev wt $name feature-x       # add feature-x worktree"
     echo "  dev $name/feature-x          # open that worktree (pi auto-starts)"
@@ -409,6 +410,7 @@ add_worktree() {
     fi
     echo "  dev $repo/$branch            # open it (pi auto-starts)"
     echo "  dev $repo/$branch/pi         # pi sub-session"
+    echo "  dev $repo/$branch/pi         # pi sub-session (preferred)"
     echo "  dev $repo/$branch/claude     # claude sub-session"
 }
 
@@ -533,6 +535,9 @@ send_pi() {
         echo "  dev send-pi replay/feature 'focus on the error handling next'"
         echo "  dev send-pi replay/main --enter 'stop and explain what you are doing'"
         echo ""
+        echo "Reminder: Always read the agent's last message before nudging."
+        echo "  dev pi-status <session> --messages 1"
+        echo "  dev queue-status <session> -m"
         echo "Note: Requires the message-queue extension in ~/.pi/agent/extensions/"
         exit 1
     fi
@@ -1238,7 +1243,7 @@ case "${1:-}" in
         echo "  dev hub/<sub>                 Hub sub-session (e.g., hub/claude)"
         echo "  dev <repo>                    Attach to default worktree/session"
         echo "  dev <repo>/<worktree>         Attach to specific worktree"
-        echo "  dev <repo>/<worktree>/<sub>   Attach to sub-session (e.g., claude)"
+        echo "  dev <repo>/<worktree>/<sub>   Attach to sub-session (prefer /pi for worktrees)"
         echo "  dev new <repo> <git-url>      Clone as worktree-based repo"
         echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
         echo "  dev kill <session>            Kill a session"
@@ -1253,6 +1258,7 @@ case "${1:-}" in
         echo "  dev hub/claude                # claude session at root"
         echo "  dev new myapp git@github.com:user/myapp"
         echo "  dev myapp                     # default (main) worktree"
+        echo "  dev myapp/main/pi             # pi session in main (preferred)"
         echo "  dev myapp/main/claude         # claude session in main"
         echo "  dev wt myapp feature-auth     # create feature branch worktree"
         echo "  dev myapp/feature-auth        # open that worktree"
@@ -1260,6 +1266,10 @@ case "${1:-}" in
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
+        echo ""
+        echo "Reminder: Read the last agent message before nudging:"
+        echo "  dev pi-status <session> --messages 1"
+        echo "  dev queue-status <session> -m"
         echo ""
         echo "Session naming:"
         echo "  You type: repo/worktree/sub"

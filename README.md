@@ -87,7 +87,8 @@ dev wt myapp feature-auth
 Examples (human reattach):
 ```bash
 dev myapp/feature-auth            # Reattach to Pi in that worktree
-dev myapp/feature-auth/claude      # Reattach to a Claude helper
+dev myapp/feature-auth/pi          # Explicit Pi sub-session (preferred)
+dev myapp/feature-auth/claude      # Claude helper (avoid for worktree agents)
 dev myapp/feature-auth/tests       # Reattach to long-running tests
 ```
 
@@ -108,6 +109,7 @@ dev myapp/feature-auth            # Resume Pi agent
 ### Worktree → agent mapping (default, not enforced)
 
 - `dev <repo>/<worktree>` → **Pi auto-starts** (implementation agent)
+- `dev <repo>/<worktree>/pi` → **Preferred** explicit Pi session (use this for agent sessions)
 - `dev <repo>` (non-worktree repo) → **Claude auto-starts** (orchestrator)
 - `dev hub/claude` → **Claude** for cross-repo coordination
 
@@ -117,6 +119,7 @@ dev myapp/feature-auth            # Resume Pi agent
 - Session names use `_` internally; you type `/` in commands.
 
 Example mapping:
+- `dev myapp/feature-auth/pi` → session name `myapp_feature-auth_pi`
 - `dev myapp/feature-auth/claude` → session name `myapp_feature-auth_claude`
 
 This is a constraint of session naming, not a feature. If it breaks for you, change `SEP` in `bin/dev`.
@@ -162,6 +165,17 @@ Example:
 export COMPOSE_PROJECT_NAME="myapp-feature-auth"
 docker compose up -d      # Containers: myapp-feature-auth-db, etc.
 docker compose down -v    # Teardown only this worktree
+```
+
+**Port conflicts:** `COMPOSE_PROJECT_NAME` does not change host ports. Prefer env‑configurable ports in `docker-compose.yml`:
+```yaml
+ports:
+  - "${DB_HOST_PORT:-5432}:5432"
+```
+Then per worktree:
+```bash
+export DB_HOST_PORT=5433
+export DATABASE_URL="postgres://candles:candles@localhost:${DB_HOST_PORT}/candles"
 ```
 
 If you do not use Docker, remove this from your workflow. Nothing in `dev` depends on it.
