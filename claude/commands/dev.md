@@ -25,6 +25,7 @@ dev <repo>/<worktree>            # Open specific worktree (for worktree-based re
 dev <repo>/<worktree>/<sub>      # Open sub-session (prefer /pi for worktrees)
 dev new <repo> <git-url>         # Clone repo with worktree structure
 dev wt <repo> <branch> [base]    # Add a new worktree for a branch
+dev cleanup <repo>/<worktree>    # Remove worktree + branch + session
 dev kill <session>               # Kill a specific session
 dev kill-all                     # Kill all sessions
 dev pi-status <session>          # Check agent status/last messages
@@ -122,13 +123,8 @@ Worktree branches are local by default. You do **not** need to push them to a re
    cd ~/projects/<repo>/<feature-branch>
    COMPOSE_PROJECT_NAME=<repo>-<feature-branch> docker compose down -v
 
-   # 2. Kill the Claude session
-   dev kill <repo>/<feature-branch>/pi
-
-   # 3. Remove the worktree and branch
-   cd ~/projects/<repo>
-   git worktree remove <feature-branch>
-   git branch -d <feature-branch>  # if merged
+   # 2. Remove worktree + branch + session
+   dev cleanup <repo>/<feature-branch>
    ```
 
 ### Why this pattern?

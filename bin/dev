@@ -409,6 +409,61 @@ kill_session() {
     exit 1
 }
 
+cleanup_worktree() {
+    local input="$1"
+    shift
+
+    local dry_run=0
+    if [ "${1:-}" = "--dry-run" ] || [ "${1:-}" = "-n" ]; then
+        dry_run=1
+    fi
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run]"
+        echo ""
+        echo "Kill the worktree session, remove the worktree, and delete the branch."
+        exit 1
+    fi
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-}"
+    if [ -z "$worktree" ]; then
+        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run]"
+        exit 1
+    fi
+
+    local repo_dir="$PROJECTS_DIR/$repo"
+    if [ ! -d "$repo_dir/.bare" ]; then
+        echo "Not a worktree-based repo: $repo"
+        exit 1
+    fi
+
+    local wt_dir="$repo_dir/$worktree"
+    if [ ! -d "$wt_dir" ]; then
+        echo "Worktree not found: $wt_dir"
+        exit 1
+    fi
+
+    local session_name="${repo}${SEP}${worktree}"
+
+    if [ "$dry_run" -eq 1 ]; then
+        echo "Would kill session: $session_name"
+        echo "Would remove worktree: $wt_dir"
+        echo "Would delete branch: $worktree"
+        return
+    fi
+
+    if session_backend "$session_name" >/dev/null 2>&1; then
+        tmux kill-session -t "$session_name" 2>/dev/null || true
+    fi
+
+    (cd "$repo_dir" && git --git-dir=.bare worktree remove "$worktree")
+    (cd "$repo_dir" && git --git-dir=.bare branch -D "$worktree")
+
+    echo "Cleaned: $input"
+}
+
 kill_all_sessions() {
     echo "Killing all sessions..."
     tmux kill-server 2>/dev/null || true
@@ -1269,6 +1324,9 @@ case "${1:-}" in
         fi
         kill_session "$2"
         ;;
+    "cleanup")
+        cleanup_worktree "$2" "${@:3}"
+        ;;
     "kill-all")
         kill_all_sessions
         ;;
@@ -1305,6 +1363,7 @@ case "${1:-}" in
         echo "  dev <repo>/<worktree>/<sub>   Attach to sub-session (prefer /pi for worktrees)"
         echo "  dev new <repo> <git-url>      Clone as worktree-based repo"
         echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
+        echo "  dev cleanup <repo>/<worktree> Remove worktree + branch + session"
         echo "  dev kill <session>            Kill a session"
         echo "  dev kill-all                  Kill all sessions"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
@@ -1324,6 +1383,7 @@ case "${1:-}" in
         echo "  dev wt myapp feature-auth     # create feature branch worktree"
         echo "  dev myapp/feature-auth        # open that worktree"
         echo "  dev myapp/feature-auth/server # sub-session for dev server"
+        echo "  dev cleanup myapp/feature-auth # remove worktree + branch + session"
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
         echo "  dev requirements replay/main/pi          # view session requirements"

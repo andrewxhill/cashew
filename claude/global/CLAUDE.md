@@ -18,6 +18,7 @@ dev <repo>                    # Open main worktree session
 dev <repo>/<worktree>         # Open specific worktree (pi auto-starts)
 dev <repo>/<worktree>/pi      # Preferred pi sub-session
 dev wt <repo> <branch>        # Add new worktree
+dev cleanup <repo>/<worktree> # Remove worktree + branch + session
 dev kill <session>            # Kill a session
 dev pi-status <session>       # Check agent status/last messages
 dev queue-status <session> -m # Check pending queue
@@ -58,11 +59,8 @@ Worktree branches are local by default. You do **not** need to push them to remo
   # 1. Kill Docker environment for the feature
   COMPOSE_PROJECT_NAME=<repo>-<feature> docker compose down -v
 
-  # 2. Kill the Claude session
-  dev kill <repo>/<feature>/pi
-
-  # 3. Remove the worktree
-  cd ~/projects/<repo> && git worktree remove <feature>
+  # 2. Remove worktree + branch + session
+  dev cleanup <repo>/<feature>
   ```
 - You manage the big picture
 
