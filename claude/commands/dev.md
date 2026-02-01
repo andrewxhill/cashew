@@ -137,6 +137,25 @@ Worktree branches are local by default. You do **not** need to push them to a re
 - Avoids Claude deleting its own worktree mid-session
 - Clean separation of concerns
 
+## Reviewing a worktree agent (do this before merging)
+
+Use the **review loop** from the PM session:
+```bash
+dev review-loop
+```
+
+Quick version:
+1. Read the agent's latest message so you don't merge mid-stream:
+   ```bash
+   dev pi-status <session> --messages 1
+   dev queue-status <session> -m
+   ```
+2. Check for session requirements/notes if they were set:
+   ```bash
+   dev requirements <session>
+   ```
+3. If the agent asked for feedback or is mid-task, reply before merging. Only review commits once the agent says it's complete.
+
 ## Tips
 
 1. Always use sub-sessions for long-running processes (Claude, servers)

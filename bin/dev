@@ -507,6 +507,7 @@ send_pi() {
         echo "Reminder: Always read the agent's last message before nudging."
         echo "  dev pi-status <session> --messages 1"
         echo "  dev queue-status <session> -m"
+        echo "  dev requirements <session>"
         echo "Note: Requires the message-queue extension in ~/.pi/agent/extensions/"
         exit 1
     fi
@@ -574,6 +575,94 @@ send_pi() {
     local display_name
     display_name=$(to_display_name "$(to_session_name "$input")")
     echo -e "Queued for ${GREEN}${display_name}${RESET} (${mode}): $message"
+}
+
+review_loop() {
+    echo "Review loop (PM session):"
+    echo "  1) List sessions: dev list"
+    echo "  2) For each worktree agent:"
+    echo "     - Read last message: dev pi-status <session> --messages 1"
+    echo "     - Check requirements: dev requirements <session>"
+    echo "     - If feedback requested, reply before reviewing"
+    echo "  3) When agent says done: run code review skill"
+    echo "  4) If review is clean: merge locally into main"
+    echo "  5) Sleep, repeat (e.g., sleep 600)"
+}
+
+requirements() {
+    local input="$1"
+    shift
+
+    local action="show"
+    local append=0
+    local clear=0
+    local message=""
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev requirements <session> [--append|--clear] [text]"
+        echo ""
+        echo "Store or view optional requirements/notes for an agent session."
+        echo ""
+        echo "Examples:"
+        echo "  dev requirements replay/feature/pi \"Needs feedback on API shape\""
+        echo "  dev requirements replay/feature/pi --append \"Confirm edge cases\""
+        echo "  dev requirements replay/feature/pi"
+        exit 1
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --append|-a)
+                append=1
+                shift
+                ;;
+            --clear|-c)
+                clear=1
+                shift
+                ;;
+            --show|-s)
+                action="show"
+                shift
+                ;;
+            *)
+                if [ -z "$message" ]; then
+                    message="$1"
+                else
+                    message="$message $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    local session
+    session=$(to_session_name "$input")
+    local req_dir="$HOME/.pi/requirements"
+    local req_file="$req_dir/${session}.txt"
+
+    mkdir -p "$req_dir"
+
+    if [ "$clear" -eq 1 ]; then
+        rm -f "$req_file"
+        echo "Cleared requirements: $input"
+        return
+    fi
+
+    if [ -n "$message" ]; then
+        if [ "$append" -eq 1 ] && [ -f "$req_file" ]; then
+            printf "%s\n" "$message" >> "$req_file"
+        else
+            printf "%s\n" "$message" > "$req_file"
+        fi
+    fi
+
+    if [ ! -f "$req_file" ] || [ ! -s "$req_file" ]; then
+        echo "(no requirements)"
+        return
+    fi
+
+    echo "Requirements for $input:"
+    cat "$req_file"
 }
 
 pi_status() {
@@ -1195,6 +1284,12 @@ case "${1:-}" in
     "queue-status")
         queue_status "${@:2}"
         ;;
+    "requirements")
+        requirements "$2" "${@:3}"
+        ;;
+    "review-loop")
+        review_loop
+        ;;
     "ls"|"list")
         list_projects
         ;;
@@ -1216,6 +1311,8 @@ case "${1:-}" in
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
+        echo "  dev requirements <session>    View/set session requirements/notes"
+        echo "  dev review-loop               Print PM review loop checklist"
         echo ""
         echo "Examples:"
         echo "  dev hub                       # root session at ~/projects"
@@ -1229,11 +1326,14 @@ case "${1:-}" in
         echo "  dev myapp/feature-auth/server # sub-session for dev server"
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
+        echo "  dev requirements replay/main/pi          # view session requirements"
+        echo "  dev review-loop                          # print PM review loop"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
         echo ""
         echo "Reminder: Read the last agent message before nudging:"
         echo "  dev pi-status <session> --messages 1"
         echo "  dev queue-status <session> -m"
+        echo "  dev requirements <session>"
         echo ""
         echo "Session naming:"
         echo "  You type: repo/worktree/sub"

@@ -30,6 +30,16 @@ dev pi-status <session> --messages 1
 dev queue-status <session> -m
 ```
 
+**Before merging or reviewing worktree output:**
+```bash
+dev review-loop
+# (or run manually)
+dev pi-status <session> --messages 1
+# requirements/notes if provided
+dev requirements <session>
+```
+Only review commits once the agent confirms it's done or asks for review.
+
 ## Worktree Workflow
 
 Worktree branches are local by default. You do **not** need to push them to remote to coordinate. Merge locally into `main` when ready.
