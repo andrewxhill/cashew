@@ -47,7 +47,13 @@ fi
 
 if [ -z "${TMUX:-}" ] && [ -z "${CASHEW_NO_TMUX:-}" ]; then
     if command -v tmux >/dev/null 2>&1; then
-        tmux new-session -A -s cashew "python3 $APP_PATH"
+        if tmux has-session -t cashew 2>/dev/null; then
+            tmux select-window -t cashew:cashew-ui 2>/dev/null || \
+                tmux new-window -t cashew -n cashew-ui "python3 $APP_PATH"
+        else
+            tmux new-session -d -s cashew -n cashew-ui "python3 $APP_PATH"
+        fi
+        tmux attach -t cashew
         exit 0
     fi
 fi

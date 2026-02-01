@@ -89,13 +89,18 @@ def normalize_message(message: str) -> str:
     return " ".join(message.splitlines()).strip()
 
 
+def tmux_session_name(session: str) -> str:
+    return session.replace("/", "_")
+
+
 def tmux_session_exists(session: str) -> bool:
     import shutil
 
     if not shutil.which("tmux"):
         return False
+    tmux_name = tmux_session_name(session)
     result = subprocess.run(
-        ["tmux", "has-session", "-t", session],
+        ["tmux", "has-session", "-t", tmux_name],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -337,7 +342,7 @@ class CashewApp(App):
             event.stop()
             return
 
-        if event.key == "/":
+        if event.key == "/" and not self.modal_open and not self.menu_state:
             await self._filter_projects()
             event.stop()
             return
@@ -500,31 +505,25 @@ class CashewApp(App):
 
         if os.environ.get("TMUX") and shutil.which("tmux"):
             command = self._auto_command(is_worktree_repo, sub)
-            cmd_parts = ["tmux", "new-session", "-A", "-s", session, "-c", str(cwd)]
+            tmux_name = tmux_session_name(session)
+            cmd_parts = ["tmux", "new-session", "-A", "-s", tmux_name, "-c", str(cwd)]
             cmd_parts += command
             tmux_inner = " ".join(shlex.quote(part) for part in cmd_parts)
-            try:
-                origin_window = (
-                    subprocess.check_output(
-                        ["tmux", "display-message", "-p", "#{window_id}"],
-                        text=True,
-                    )
-                    .strip()
-                )
-            except Exception:
-                origin_window = ""
-            return_cmd = ""
-            if origin_window:
-                return_cmd = f"tmux select-window -t {shlex.quote(origin_window)}; "
-            tmux_cmd = (
-                "bash -lc '"
-                "WIN=$(tmux display-message -p \"#{window_id}\"); "
-                "unset TMUX; "
-                f"{tmux_inner}; "
-                f"{return_cmd}"
-                "tmux kill-window -t \"$WIN\"'"
+            tmux_cmd = f"bash -lc 'unset TMUX; exec {tmux_inner}'"
+            window_name = f"cashew:{tmux_name}"
+            subprocess.run(
+                ["tmux", "new-window", "-d", "-n", window_name, tmux_cmd],
+                check=False,
             )
-            subprocess.run(["tmux", "new-window", tmux_cmd], check=False)
+            subprocess.run(
+                [
+                    "tmux",
+                    "display-message",
+                    f"Opened {window_name}. Use prefix+w to switch windows.",
+                ],
+                check=False,
+            )
+            self._set_status(f"Opened {window_name}. Use tmux prefix+w to switch.")
             return
 
         os.execvp("dev", ["dev", session])
