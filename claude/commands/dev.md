@@ -13,6 +13,8 @@ dev pi-status <session> --messages 1
 dev queue-status <session> -m
 ```
 
+**Messaging rule:** Use `dev send-pi <session> <message>` to queue messages for worktree Pi agents. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
+
 
 ## Quick Reference
 
@@ -30,6 +32,8 @@ dev kill <session>               # Kill a specific session
 dev kill-all                     # Kill all sessions
 dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
+dev send <session> <keys>         # Send raw tmux keys (direct input)
+dev send-pi <session> <message>   # Queue a message for a Pi agent (preferred)
 ```
 
 ## Project Structure
@@ -140,6 +144,12 @@ Use the **review loop** from the PM session:
 dev review-loop
 ```
 
+Important: execute the loop manually. The last step must be:
+```bash
+bash sleep 300
+```
+Run it in the foreground, then return to step 1 and repeat. Do **not** write scripts, nohup, or background loops.
+
 Quick version:
 1. Read the agent's latest message so you don't merge mid-stream:
    ```bash
@@ -155,7 +165,8 @@ Quick version:
 ## Tips
 
 1. Always use sub-sessions for long-running processes (Claude, servers)
-2. The session persists even if you close SSH or terminal
-3. Use `dev` with no args to see all projects and active sessions
-4. Worktree repos let you work on multiple branches simultaneously
-5. Main Claude is your "project manager" - use it to orchestrate features
+2. Use `dev send-pi <session> <message>` when messaging worktree agents; it queues safely. Use `dev send` only for raw keystrokes.
+3. The session persists even if you close SSH or terminal
+4. Use `dev` with no args to see all projects and active sessions
+5. Worktree repos let you work on multiple branches simultaneously
+6. Main Claude is your "project manager" - use it to orchestrate features

@@ -152,6 +152,15 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    ```
    This enables: `dev send`, `dev send-pi`, `dev pi-status`, `dev queue-status`.
 
+## Cashew TUI (optional)
+
+Launch the Textual TUI:
+```bash
+cashew
+```
+
+It shows session list, last message, requirements, and queue status, with shortcuts for send‑pi, review loop, and cleanup.
+
 ## Docker Isolation (recommended, not enforced)
 
 **Observed**

@@ -641,7 +641,9 @@ review_loop() {
     echo "     - If feedback requested, reply before reviewing"
     echo "  3) When agent says done: run code review skill"
     echo "  4) If review is clean: merge locally into main"
-    echo "  5) Sleep, repeat (e.g., sleep 600)"
+    echo "  5) Run: bash sleep 300 (in this session, foreground)"
+    echo "  6) After sleep finishes, go back to step 1 and repeat"
+    echo "  7) Do NOT write scripts, nohup, or background loops"
 }
 
 requirements() {
@@ -869,6 +871,10 @@ pi_status() {
             echo "unknown"
             return
         fi
+        if ! [[ "$ts_ms" =~ ^[0-9]+$ ]]; then
+            echo "unknown"
+            return
+        fi
         local ts_s=$((ts_ms / 1000))
         date -r "$ts_s" "+%Y-%m-%d %H:%M:%S"
     }
@@ -978,10 +984,12 @@ pi_status() {
             def text_of:
               if (.message.content | type) == "string" then .message.content
               else ([.message.content[]? | select(.type=="text") | .text] | join(" ")) end;
+            def clean_text:
+              gsub("[\\t\\r\\n]+"; " ");
             select(.type=="message")
             | select((.message.timestamp // 0) >= $cutoff)
             | select(.message.role=="user" or .message.role=="assistant")
-            | (.message.timestamp|tostring) + "\t" + .message.role + "\t" + (text_of // "")' "$session_file" | tail -n "$messages_count")
+            | (.message.timestamp|tostring) + "\t" + .message.role + "\t" + ((text_of // "") | clean_text)' "$session_file" | tail -n "$messages_count")
 
         if [ -z "$message_lines" ]; then
             echo "  (none)"

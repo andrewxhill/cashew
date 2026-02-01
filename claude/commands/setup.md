@@ -28,6 +28,13 @@ command -v brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/
 # Install core tools
 brew install git gh tmux
 
+# TUI dependency (optional)
+python3 -m pip install --user textual
+
+# Cashew TUI launcher (optional)
+sudo curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/bin/cashew -o /usr/local/bin/cashew
+sudo chmod +x /usr/local/bin/cashew
+
 # Install Docker Desktop
 brew install --cask docker
 ```
@@ -35,7 +42,14 @@ brew install --cask docker
 ### Linux (Debian/Ubuntu)
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl tmux
+sudo apt-get install -y git curl tmux python3-pip
+
+# TUI dependency (optional)
+python3 -m pip install --user textual
+
+# Cashew TUI launcher (optional)
+sudo curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/bin/cashew -o /usr/local/bin/cashew
+sudo chmod +x /usr/local/bin/cashew
 
 # GitHub CLI
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -53,17 +67,21 @@ sudo usermod -aG docker $USER
 mkdir -p ~/<folder-name-from-step-1>
 ```
 
-## Step 4: Install and Configure dev Script
+## Step 4: Install dev + Cashew TUI
 
-Download the dev script, then **edit it** to use the user's chosen projects folder:
+Clone the repo and symlink the binaries so updates are instant:
 
 ```bash
-# Download
-sudo curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/bin/dev -o /usr/local/bin/dev
-sudo chmod +x /usr/local/bin/dev
+# Clone cashew (worktree-based repo)
+mkdir -p ~/<folder-name-from-step-1>/cashew
+cd ~/<folder-name-from-step-1>
+git clone --bare git@github.com:andrewxhill/cashew.git cashew/.bare
+cd cashew
+GIT_DIR=.bare git worktree add main main
 
-# Edit PROJECTS_DIR to match user's choice (if not ~/projects)
-sudo sed -i '' 's|PROJECTS_DIR="\$HOME/projects"|PROJECTS_DIR="\$HOME/<folder-name>"|' /usr/local/bin/dev
+# Symlink binaries
+sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/dev /usr/local/bin/dev
+sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/cashew /usr/local/bin/cashew
 ```
 
 ## Step 5: Install Claude Config
@@ -119,6 +137,7 @@ git --version
 gh --version
 tmux -V
 dev --help
+cashew
 ssh -T git@github.com
 ```
 
@@ -126,7 +145,8 @@ ssh -T git@github.com
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| dev script | `/usr/local/bin/dev` | Project session manager |
+| dev script | `/usr/local/bin/dev` | Project session manager (symlink to repo) |
+| cashew launcher | `/usr/local/bin/cashew` | Textual TUI launcher (symlink to repo) |
 | Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions |
 | /dev skill | `~/.claude/commands/dev.md` | Full dev documentation |
 | /setup skill | `~/.claude/commands/setup.md` | This bootstrap skill |

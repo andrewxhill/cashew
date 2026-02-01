@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -euo pipefail
+
+find_app() {
+    if [ -n "${CASHEW_TUI_PATH:-}" ] && [ -f "$CASHEW_TUI_PATH" ]; then
+        echo "$CASHEW_TUI_PATH"
+        return
+    fi
+
+    if [ -n "${CASHEW_HOME:-}" ] && [ -f "$CASHEW_HOME/tui/app.py" ]; then
+        echo "$CASHEW_HOME/tui/app.py"
+        return
+    fi
+
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/../tui/app.py" ]; then
+        echo "$script_dir/../tui/app.py"
+        return
+    fi
+
+    if [ -f "$HOME/Projects/cashew/main/tui/app.py" ]; then
+        echo "$HOME/Projects/cashew/main/tui/app.py"
+        return
+    fi
+
+    if [ -f "$HOME/.cashew/tui/app.py" ]; then
+        echo "$HOME/.cashew/tui/app.py"
+        return
+    fi
+
+    return 1
+}
+
+APP_PATH="$(find_app || true)"
+if [ -z "$APP_PATH" ]; then
+    echo "Cashew TUI not found." >&2
+    echo "Set CASHEW_HOME or CASHEW_TUI_PATH, or install to ~/.cashew/tui/app.py." >&2
+    exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required to run the Cashew TUI." >&2
+    exit 1
+fi
+
+if [ -z "${TMUX:-}" ] && [ -z "${CASHEW_NO_TMUX:-}" ]; then
+    if command -v tmux >/dev/null 2>&1; then
+        tmux new-session -A -s cashew "python3 $APP_PATH"
+        exit 0
+    fi
+fi
+
+python3 "$APP_PATH"

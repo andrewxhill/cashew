@@ -34,11 +34,13 @@ dev queue-status <session> -m
 **Before merging or reviewing worktree output:**
 ```bash
 dev review-loop
-# (or run manually)
-dev pi-status <session> --messages 1
-# requirements/notes if provided
-dev requirements <session>
 ```
+Run the loop manually. Always execute:
+```bash
+bash sleep 300
+```
+Run it in the foreground, then return to step 1 and repeat. Do **not** write scripts, nohup, or background loops.
+
 Only review commits once the agent confirms it's done or asks for review.
 
 ## Worktree Workflow
