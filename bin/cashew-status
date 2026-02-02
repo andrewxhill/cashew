@@ -1,0 +1,75 @@
+#!/bin/bash
+
+set -euo pipefail
+
+type="${1:-idle}"
+repo="${2:-}"
+worktree="${3:-}"
+session="${4:-}"
+
+projects_dir() {
+    if [ -d "$HOME/Projects" ]; then
+        echo "$HOME/Projects"
+    else
+        echo "$HOME/projects"
+    fi
+}
+
+run() {
+    local cmd=("$@")
+    "${cmd[@]}" 2>/dev/null || true
+}
+
+case "$type" in
+    idle)
+        echo "Select a project/worktree/session on the left."
+        exit 0
+        ;;
+    project)
+        echo "Project: $repo"
+        echo ""
+        if [ -d "$(projects_dir)/$repo/.bare" ]; then
+            echo "Worktrees:"
+            for wt in $(ls -1 "$(projects_dir)/$repo" 2>/dev/null | sort); do
+                [ "$wt" = ".bare" ] && continue
+                echo "- $wt"
+            done
+        else
+            echo "(non-worktree repo)"
+        fi
+        exit 0
+        ;;
+    worktree)
+        echo "Worktree: $repo/$worktree"
+        echo ""
+        if [ -n "$worktree" ]; then
+            run dev pi-status "$repo/$worktree/pi" --messages 1
+            echo ""
+            run dev requirements "$repo/$worktree/pi"
+            echo ""
+            run dev queue-status "$repo/$worktree/pi" -m
+        fi
+        exit 0
+        ;;
+    session)
+        echo "Session: $session"
+        echo ""
+        if [[ "$session" == */pi ]]; then
+            run dev pi-status "$session" --messages 1
+            echo ""
+            run dev requirements "$session"
+            echo ""
+            run dev queue-status "$session" -m
+        fi
+        exit 0
+        ;;
+    new-session)
+        echo "New session for $repo/$worktree"
+        echo "Press Enter to name the sub-session."
+        exit 0
+        ;;
+    *)
+        echo "Select a project/worktree/session on the left."
+        exit 0
+        ;;
+esac

@@ -154,12 +154,16 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
 
 ## Cashew TUI (optional)
 
-Launch the Textual TUI:
+Launch the tmux + fzf TUI:
 ```bash
 cashew
 ```
 
-It shows session list, last message, requirements, and queue status, with shortcuts for send‑pi, review loop, and cleanup.
+- Left pane: project/worktree/session tree (type to filter)
+- Right pane: status for the highlighted entry; Enter attaches the session in the right pane
+- Uses tmux panes (no embedded terminal), so the left navigator stays visible
+
+Requirements: `tmux`, `fzf`.
 
 ## Docker Isolation (recommended, not enforced)
 

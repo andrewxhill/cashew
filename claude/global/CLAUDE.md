@@ -176,6 +176,96 @@ docker compose --profile ci up --abort-on-container-exit
 
 When in doubt, use `docker ps` to see what's running and confirm with the user before stopping anything outside your project scope.
 
+## Replay Monorepo Infrastructure
+
+The replay monorepo runs databases and services locally via Docker/Podman containers.
+
+**CRITICAL: The Podman machine is shared across ALL projects. NEVER stop or restart it.**
+
+### Starting Infrastructure
+
+```bash
+# Check if Podman machine is running
+/opt/podman/bin/podman machine list
+
+# If Podman machine is not running, start it (this is SAFE - it doesn't affect other containers)
+/opt/podman/bin/podman machine start
+
+# ❌ NEVER DO THIS - other projects depend on the running machine:
+# /opt/podman/bin/podman machine stop
+# /opt/podman/bin/podman machine rm
+
+# Start databases from the repo root
+cd ~/projects/replay/main
+/opt/podman/bin/podman compose up -d postgres redis
+
+# Verify databases are running
+/opt/podman/bin/podman ps
+pg_isready -h localhost -p 5432
+```
+
+### Required Services for Tests
+
+| Service | Port | Required For |
+|---------|------|--------------|
+| PostgreSQL (TimescaleDB) | 5432 | Integration tests, schema drift checks |
+| Redis | 6379 | Some integration tests, caching |
+
+### Checking Service Health
+
+```bash
+# PostgreSQL
+pg_isready -h localhost -p 5432
+
+# Redis
+redis-cli ping
+
+# All containers
+/opt/podman/bin/podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+### Common Issues
+
+**Integration tests fail with ECONNREFUSED:5432**
+- PostgreSQL isn't running
+- Fix: `/opt/podman/bin/podman compose up -d postgres`
+
+**Podman can't connect**
+- Podman machine isn't running
+- Fix: `/opt/podman/bin/podman machine start`
+
+**Pre-push hook fails on integration tests**
+- DATABASE_URL is set but database isn't running
+- Fix: Start the database containers before pushing
+
 ## Git Preferences
 
 - Never use HTTPS URLs which require interactive authentication
+
+### CRITICAL: Never Bypass Git Hooks
+
+**NEVER use `--no-verify` on commit or push. No exceptions. No rationalizations.**
+
+```bash
+# ❌ FORBIDDEN - These commands are NEVER acceptable
+git commit --no-verify
+git push --no-verify
+git commit -n  # -n is shorthand for --no-verify
+
+# ✅ CORRECT - Fix what the hooks are telling you
+# If pre-commit fails: fix lint/format/type errors
+# If pre-push fails: fix failing tests
+```
+
+**Why this matters:**
+- Hooks exist to catch problems BEFORE they reach the repository
+- A failing hook is telling you something is broken that YOU need to fix
+- Bypassing hooks creates broken commits that waste everyone's time
+- "It works on my machine" is not an excuse - fix the tests
+
+**When hooks fail:**
+1. Read the error output carefully
+2. Fix the underlying issue (lint, types, tests, etc.)
+3. Re-run the commit/push
+4. If tests require infrastructure (database, Redis), ensure it's running
+5. If you're stuck, ask for help - but NEVER bypass

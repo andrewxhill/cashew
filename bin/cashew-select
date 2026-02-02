@@ -1,0 +1,222 @@
+#!/bin/bash
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+status_cmd="$script_dir/cashew-status"
+
+projects_dir() {
+    if [ -d "$HOME/Projects" ]; then
+        echo "$HOME/Projects"
+    else
+        echo "$HOME/projects"
+    fi
+}
+
+right_pane_id() {
+    local pane
+    pane=$(tmux show-option -gqv @cashew_right_pane || true)
+    if [ -n "$pane" ]; then
+        echo "$pane"
+        return
+    fi
+    tmux list-panes -F "#{pane_id} #{pane_index}" | awk '$2==1 {print $1; exit}'
+}
+
+list_tmux_sessions() {
+    tmux list-sessions -F "#S" 2>/dev/null || true
+}
+
+sessions_for_worktree() {
+    local repo="$1"
+    local worktree="$2"
+    local prefix="${repo}_${worktree}"
+    local name
+    while read -r name; do
+        [ -z "$name" ] && continue
+        if [ "$name" = "$prefix" ]; then
+            echo "$repo/$worktree"
+        elif [[ "$name" == "${prefix}_"* ]]; then
+            local sub="${name#${prefix}_}"
+            echo "$repo/$worktree/$sub"
+        fi
+    done
+}
+
+sessions_for_repo() {
+    local repo="$1"
+    local name
+    while read -r name; do
+        [ -z "$name" ] && continue
+        if [ "$name" = "$repo" ]; then
+            echo "$repo"
+        elif [[ "$name" == "${repo}_"* ]]; then
+            local sub="${name#${repo}_}"
+            echo "$repo/$sub"
+        fi
+    done
+}
+
+list_entries() {
+    local root
+    root=$(projects_dir)
+    [ -d "$root" ] || return
+
+    local tmux_sessions
+    tmux_sessions=$(list_tmux_sessions)
+
+    local repo
+    for repo in $(ls -1 "$root" 2>/dev/null | sort); do
+        [ -d "$root/$repo" ] || continue
+        [ "$repo" = "dev" ] && continue
+
+        if [ -d "$root/$repo/.bare" ]; then
+            printf "project\t%s\t\t\t%s\n" "$repo" "$repo"
+            local worktree
+            for worktree in $(ls -1 "$root/$repo" 2>/dev/null | sort); do
+                [ -d "$root/$repo/$worktree" ] || continue
+                [ "$worktree" = ".bare" ] && continue
+                printf "worktree\t%s\t%s\t\t  %s\n" "$repo" "$worktree" "$worktree"
+                sessions_for_worktree "$repo" "$worktree" <<<"$tmux_sessions" | sort | while read -r session; do
+                    [ -z "$session" ] && continue
+                    local label="${session##*/}"
+                    if [ "$session" = "$repo/$worktree" ]; then
+                        label="root"
+                    fi
+                    printf "session\t%s\t%s\t%s\t    %s\n" "$repo" "$worktree" "$session" "$label"
+                done
+                printf "new-session\t%s\t%s\t\t    new...\n" "$repo" "$worktree"
+            done
+        else
+            printf "project\t%s\t\t\t%s\n" "$repo" "$repo"
+            sessions_for_repo "$repo" <<<"$tmux_sessions" | sort | while read -r session; do
+                [ -z "$session" ] && continue
+                local label="${session##*/}"
+                printf "session\t%s\t\t%s\t  %s\n" "$repo" "$session" "$label"
+            done
+        fi
+    done
+}
+
+update_right() {
+    local type="$1"
+    local repo="$2"
+    local worktree="$3"
+    local session="$4"
+    local pane
+    pane=$(right_pane_id)
+    [ -n "$pane" ] || return
+
+    local cmd_line
+    cmd_line=$(printf "%q " "$status_cmd" status "$type" "$repo" "$worktree" "$session")
+    tmux respawn-pane -k -t "$pane" "bash -lc \"${cmd_line}\""
+}
+
+open_session() {
+    local type="$1"
+    local repo="$2"
+    local worktree="$3"
+    local session="$4"
+    local pane
+    pane=$(right_pane_id)
+    [ -n "$pane" ] || return
+
+    if [ "$type" = "new-session" ]; then
+        local worktree_arg="$worktree"
+        if [ -z "$worktree_arg" ]; then
+            worktree_arg="__root__"
+        fi
+        tmux command-prompt -p "New session name" "run-shell '$script_dir/cashew-select open-new $repo $worktree_arg %%'"
+        return
+    fi
+
+    if [ "$type" != "session" ]; then
+        return
+    fi
+
+    if [ -z "$session" ]; then
+        return
+    fi
+
+    local root
+    root=$(projects_dir)
+    local cwd="$root/$repo"
+    if [ -n "$worktree" ]; then
+        cwd="$root/$repo/$worktree"
+    fi
+
+    local sub=""
+    if [[ "$session" == */*/* ]]; then
+        sub="${session##*/}"
+    fi
+
+    local tmux_name="${session//\//_}"
+    local cmd=("tmux" "new-session" "-A" "-s" "$tmux_name" "-c" "$cwd")
+    if [ "$sub" = "pi" ]; then
+        cmd+=("pi")
+    elif [ "$sub" = "claude" ]; then
+        cmd+=("claude" "--dangerously-skip-permissions")
+    else
+        if [ -d "$root/$repo/.bare" ]; then
+            cmd+=("pi")
+        else
+            cmd+=("claude" "--dangerously-skip-permissions")
+        fi
+    fi
+
+    local cmd_line
+    cmd_line=$(printf "%q " "${cmd[@]}")
+    tmux respawn-pane -k -t "$pane" "bash -lc 'unset TMUX; exec ${cmd_line}'"
+    tmux select-pane -t "$pane"
+}
+
+open_new_session() {
+    local repo="$1"
+    local worktree="$2"
+    local sub="$3"
+    if [ "$worktree" = "__root__" ]; then
+        worktree=""
+    fi
+    sub=$(echo "$sub" | xargs)
+    [ -z "$sub" ] && return
+
+    local session="$repo"
+    if [ -n "$worktree" ]; then
+        session="$repo/$worktree/$sub"
+    else
+        session="$repo/$sub"
+    fi
+    open_session "session" "$repo" "$worktree" "$session"
+}
+
+case "${1:-}" in
+    update)
+        update_right "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+        exit 0
+        ;;
+    open)
+        open_session "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+        exit 0
+        ;;
+    open-new)
+        open_new_session "${2:-}" "${3:-}" "${4:-}"
+        exit 0
+        ;;
+    *)
+        ;;
+esac
+
+while true; do
+    if ! list_entries | fzf \
+        --ansi \
+        --delimiter=$'\t' \
+        --with-nth=5 \
+        --bind "start:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})" \
+        --bind "change:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})" \
+        --bind "enter:execute-silent($script_dir/cashew-select open {1} {2} {3} {4})" \
+        --prompt="Cashew> " \
+        --header="Enter to attach; type to filter; Ctrl-C to exit"; then
+        exit 0
+    fi
+
+done

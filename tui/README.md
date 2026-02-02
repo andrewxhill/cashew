@@ -1,11 +1,11 @@
 # Cashew TUI
 
-Lightweight Textual UI for Cashew sessions. It wraps existing `dev` commands and does not change session behavior.
+Cashew now uses a **tmux + fzf** TUI. The left pane is a selector, the right pane shows status or attaches to the live session you choose.
 
 ## Requirements
 
-- Python 3
-- `textual` (`python3 -m pip install --user textual`)
+- `tmux`
+- `fzf`
 
 ## Run
 
@@ -13,22 +13,14 @@ Lightweight Textual UI for Cashew sessions. It wraps existing `dev` commands and
 cashew
 ```
 
-## Keybindings
+## Usage
 
-- `l` refresh projects
-- `/` filter projects/worktrees
-- `p` message PM (sends to `<repo>/main`)
-- `r` send review-loop instructions to PM
-- `w` request code review for a worktree (via PM)
-- `s` message worktree agent (`dev send-pi`)
-- `c` cleanup worktree (`dev cleanup`, confirms with y/n)
-- `→` attach default session (PM for project, /pi for worktree)
-- `q` quit
+- Type to filter projects/worktrees/sessions.
+- Move selection to update the right pane status.
+- Press Enter on a session to attach it in the right pane.
+- Select `new...` under a worktree to create a new sub-session.
 
-## What it shows
+## Notes
 
-- Project/worktree tree (derived from `~/Projects`)
-- PM session per repo (`<repo>/main`)
-- Worktree last message (`dev pi-status --messages 1`)
-- Requirements (`dev requirements`)
-- Queue summary (`dev queue-status -m`)
+- The right pane is a real tmux client (nested), not an embedded terminal.
+- Use `cashew` again to return to the TUI if you switch away.

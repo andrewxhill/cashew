@@ -82,6 +82,15 @@ GIT_DIR=.bare git worktree add main main
 # Symlink binaries
 sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/dev /usr/local/bin/dev
 sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/cashew /usr/local/bin/cashew
+
+# Install fzf (required for Cashew TUI)
+if ! command -v fzf >/dev/null 2>&1; then
+  if command -v brew >/dev/null 2>&1; then
+    brew install fzf
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y fzf
+  fi
+fi
 ```
 
 ## Step 5: Install Claude Config
@@ -136,6 +145,7 @@ docker --version
 git --version
 gh --version
 tmux -V
+fzf --version
 dev --help
 cashew
 ssh -T git@github.com
@@ -146,7 +156,7 @@ ssh -T git@github.com
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | dev script | `/usr/local/bin/dev` | Project session manager (symlink to repo) |
-| cashew launcher | `/usr/local/bin/cashew` | Textual TUI launcher (symlink to repo) |
+| cashew launcher | `/usr/local/bin/cashew` | tmux + fzf TUI launcher (symlink to repo) |
 | Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions |
 | /dev skill | `~/.claude/commands/dev.md` | Full dev documentation |
 | /setup skill | `~/.claude/commands/setup.md` | This bootstrap skill |

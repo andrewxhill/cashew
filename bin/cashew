@@ -2,60 +2,49 @@
 
 set -euo pipefail
 
-find_app() {
-    if [ -n "${CASHEW_TUI_PATH:-}" ] && [ -f "$CASHEW_TUI_PATH" ]; then
-        echo "$CASHEW_TUI_PATH"
-        return
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+selector="$script_dir/cashew-select"
+status="$script_dir/cashew-status"
+
+ensure_session() {
+    if ! tmux has-session -t cashew 2>/dev/null; then
+        tmux new-session -d -s cashew -n cashew-ui
     fi
 
-    if [ -n "${CASHEW_HOME:-}" ] && [ -f "$CASHEW_HOME/tui/app.py" ]; then
-        echo "$CASHEW_HOME/tui/app.py"
-        return
+    if ! tmux list-windows -t cashew -F '#W' | grep -q '^cashew-ui$'; then
+        tmux new-window -t cashew -n cashew-ui
     fi
 
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$script_dir/../tui/app.py" ]; then
-        echo "$script_dir/../tui/app.py"
-        return
+    tmux select-window -t cashew:cashew-ui
+
+    local pane_count
+    pane_count=$(tmux list-panes -t cashew:cashew-ui | wc -l | tr -d ' ')
+    if [ "$pane_count" -lt 2 ]; then
+        tmux split-window -h -p 60 -t cashew:cashew-ui
     fi
 
-    if [ -f "$HOME/Projects/cashew/main/tui/app.py" ]; then
-        echo "$HOME/Projects/cashew/main/tui/app.py"
-        return
-    fi
+    local left_pane
+    local right_pane
+    left_pane=$(tmux list-panes -t cashew:cashew-ui -F '#{pane_id} #{pane_index}' | awk '$2==0 {print $1; exit}')
+    right_pane=$(tmux list-panes -t cashew:cashew-ui -F '#{pane_id} #{pane_index}' | awk '$2==1 {print $1; exit}')
 
-    if [ -f "$HOME/.cashew/tui/app.py" ]; then
-        echo "$HOME/.cashew/tui/app.py"
-        return
-    fi
+    tmux set-option -gq @cashew_left_pane "$left_pane"
+    tmux set-option -gq @cashew_right_pane "$right_pane"
 
-    return 1
+    tmux send-keys -t "$left_pane" "clear; $selector" C-m
+    tmux send-keys -t "$right_pane" "clear; $status idle" C-m
+    tmux select-pane -t "$left_pane"
 }
 
-APP_PATH="$(find_app || true)"
-if [ -z "$APP_PATH" ]; then
-    echo "Cashew TUI not found." >&2
-    echo "Set CASHEW_HOME or CASHEW_TUI_PATH, or install to ~/.cashew/tui/app.py." >&2
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "tmux is required to run Cashew." >&2
     exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required to run the Cashew TUI." >&2
-    exit 1
-fi
+ensure_session
 
-if [ -z "${TMUX:-}" ] && [ -z "${CASHEW_NO_TMUX:-}" ]; then
-    if command -v tmux >/dev/null 2>&1; then
-        if tmux has-session -t cashew 2>/dev/null; then
-            tmux select-window -t cashew:cashew-ui 2>/dev/null || \
-                tmux new-window -t cashew -n cashew-ui "python3 $APP_PATH"
-        else
-            tmux new-session -d -s cashew -n cashew-ui "python3 $APP_PATH"
-        fi
-        tmux attach -t cashew
-        exit 0
-    fi
+if [ -n "${TMUX:-}" ]; then
+    tmux switch-client -t cashew
+else
+    tmux attach -t cashew
 fi
-
-python3 "$APP_PATH"

@@ -21,15 +21,11 @@ class Project:
 
 @dataclass
 class NodeData:
-    kind: str  # "project" | "worktree"
+    kind: str  # "project" | "worktree" | "session" | "new-session"
     repo: str
     worktree: Optional[str] = None
-
-
-@dataclass
-class MenuState:
-    node: NodeData
-    options: List[str]
+    session: Optional[str] = None
+    sub: Optional[str] = None
 
 
 def projects_dir() -> Path:
@@ -106,6 +102,64 @@ def tmux_session_exists(session: str) -> bool:
         stderr=subprocess.DEVNULL,
     )
     return result.returncode == 0
+
+
+def tmux_window_exists(window_name: str) -> bool:
+    import shutil
+
+    if not shutil.which("tmux"):
+        return False
+    result = subprocess.run(
+        ["tmux", "list-windows", "-F", "#W"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    names = {line.strip() for line in (result.stdout or "").splitlines() if line.strip()}
+    return window_name in names
+
+
+def tmux_list_sessions() -> List[str]:
+    import shutil
+
+    if not shutil.which("tmux"):
+        return []
+    result = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#S"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+
+
+def sessions_for_worktree(repo: str, worktree: str, tmux_sessions: List[str]) -> List[str]:
+    prefix = f"{repo}_{worktree}"
+    sessions = []
+    for name in tmux_sessions:
+        if not name.startswith(prefix):
+            continue
+        if name == prefix:
+            sessions.append(f"{repo}/{worktree}")
+        elif name.startswith(prefix + "_"):
+            sub = name[len(prefix) + 1 :]
+            sessions.append(f"{repo}/{worktree}/{sub}")
+    return sorted(set(sessions))
+
+
+def sessions_for_repo(repo: str, tmux_sessions: List[str]) -> List[str]:
+    sessions = []
+    for name in tmux_sessions:
+        if name == repo:
+            sessions.append(repo)
+        elif name.startswith(repo + "_"):
+            sub = name[len(repo) + 1 :]
+            sessions.append(f"{repo}/{sub}")
+    return sorted(set(sessions))
 
 
 class PromptScreen(ModalScreen[str]):
@@ -187,7 +241,6 @@ class CashewApp(App):
         self.current_node: Optional[NodeData] = None
         self.pending_cleanup: Optional[NodeData] = None
         self.modal_open = False
-        self.menu_state: Optional[MenuState] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -215,11 +268,39 @@ class CashewApp(App):
             self.current_node = None
             self._set_status("No projects found.")
             return
+        tmux_sessions = tmux_list_sessions()
         for project in self.projects:
             node = tree.root.add(project.name, expand=True, data=NodeData("project", project.name))
             if project.is_worktree_repo:
                 for worktree in project.worktrees:
-                    node.add(worktree, data=NodeData("worktree", project.name, worktree))
+                    wt_node = node.add(worktree, data=NodeData("worktree", project.name, worktree))
+                    sessions = sessions_for_worktree(project.name, worktree, tmux_sessions)
+                    for session in sessions:
+                        label = session.split("/")[-1]
+                        if session == f"{project.name}/{worktree}":
+                            label = "root"
+                        wt_node.add(
+                            label,
+                            data=NodeData(
+                                "session",
+                                project.name,
+                                worktree,
+                                session=session,
+                                sub=None if label == "root" else label,
+                            ),
+                        )
+                    wt_node.add(
+                        "new...",
+                        data=NodeData("new-session", project.name, worktree),
+                    )
+            else:
+                sessions = sessions_for_repo(project.name, tmux_sessions)
+                for session in sessions:
+                    label = session.split("/")[-1]
+                    node.add(
+                        label,
+                        data=NodeData("session", project.name, None, session=session, sub=label),
+                    )
         tree.root.expand()
         first = tree.root.children[0] if tree.root.children else None
         if first and isinstance(first.data, NodeData):
@@ -231,7 +312,7 @@ class CashewApp(App):
         await self._refresh_status()
 
     async def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
-        if self.modal_open or self.menu_state:
+        if self.modal_open:
             return
         node = event.node
         if node and isinstance(node.data, NodeData):
@@ -243,7 +324,7 @@ class CashewApp(App):
         if not node or not isinstance(node.data, NodeData):
             return
         self.current_node = node.data
-        await self._show_action_menu()
+        await self._handle_selection()
 
     async def _prompt(self, title: str, placeholder: str, confirm: str) -> str:
         self.modal_open = True
@@ -251,6 +332,38 @@ class CashewApp(App):
             return await self.push_screen_wait(PromptScreen(title, placeholder, confirm))
         finally:
             self.modal_open = False
+
+    def _session_from_node(self, node: NodeData) -> Optional[str]:
+        if node.session:
+            return node.session
+        if node.kind == "session" and node.worktree:
+            return f"{node.repo}/{node.worktree}"
+        return None
+
+    async def _handle_selection(self) -> None:
+        if not self.current_node:
+            return
+        node = self.current_node
+        if node.kind == "session":
+            project = self._project_for_node(node)
+            if not project:
+                return
+            session = self._session_from_node(node)
+            if not session:
+                return
+            cwd = project.path / node.worktree if node.worktree else project.path
+            self._open_session(session, cwd, project.is_worktree_repo, node.sub)
+        elif node.kind == "new-session":
+            project = self._project_for_node(node)
+            if not project:
+                return
+            sub = await self._prompt("New session", "name (pi/claude/etc)", "open")
+            sub = (sub or "").strip()
+            if not sub:
+                return
+            cwd = project.path / node.worktree if node.worktree else project.path
+            session = f"{node.repo}/{node.worktree}/{sub}"
+            self._open_session(session, cwd, project.is_worktree_repo, sub)
 
     async def action_pm_message(self) -> None:
         if not self.current_node:
@@ -284,7 +397,7 @@ class CashewApp(App):
         if not project:
             return
         worktree = None
-        if self.current_node.kind == "worktree":
+        if self.current_node.worktree:
             worktree = self.current_node.worktree
         else:
             worktree = await self._prompt("Worktree name", "feature-branch", "send")
@@ -297,7 +410,10 @@ class CashewApp(App):
         self._set_status(output or f"Sent review request to {session}")
 
     async def action_worktree_message(self) -> None:
-        if not self.current_node or self.current_node.kind != "worktree":
+        if not self.current_node or self.current_node.kind not in {"worktree", "session", "new-session"}:
+            self._set_status("Select a worktree to message its agent.")
+            return
+        if not self.current_node.worktree:
             self._set_status("Select a worktree to message its agent.")
             return
         session = worktree_session(self.current_node.repo, self.current_node.worktree or "")
@@ -309,7 +425,7 @@ class CashewApp(App):
         self._set_status(output or f"Queued for {session}")
 
     async def action_cleanup(self) -> None:
-        if not self.current_node or self.current_node.kind != "worktree":
+        if not self.current_node or not self.current_node.worktree:
             self._set_status("Select a worktree to clean up.")
             return
         self.pending_cleanup = self.current_node
@@ -318,17 +434,6 @@ class CashewApp(App):
     async def on_key(self, event) -> None:
         if isinstance(self.focused, Input):
             return
-
-        if self.menu_state:
-            if event.key == "escape":
-                self.menu_state = None
-                await self._refresh_status()
-                event.stop()
-                return
-            if event.key.isdigit():
-                await self._handle_menu_choice(int(event.key))
-                event.stop()
-                return
 
         if self.pending_cleanup and event.key in {"y", "n"}:
             if event.key == "y":
@@ -342,7 +447,7 @@ class CashewApp(App):
             event.stop()
             return
 
-        if event.key == "/" and not self.modal_open and not self.menu_state:
+        if event.key == "/" and not self.modal_open:
             await self._filter_projects()
             event.stop()
             return
@@ -357,85 +462,14 @@ class CashewApp(App):
                 return project
         return None
 
-    async def _show_action_menu(self) -> None:
-        if not self.current_node:
-            return
-        if self.menu_state:
-            return
-        if self.current_node.kind == "project":
-            project = self._project_for_node(self.current_node)
-            session = pm_session(project.name, project.is_worktree_repo) if project else ""
-            pm_label = "Attach PM session"
-            if session and tmux_session_exists(session):
-                pm_label = "Attach PM session (running)"
-            options = [pm_label, "Create new worktree"]
-        else:
-            repo = self.current_node.repo
-            worktree = self.current_node.worktree or ""
-            pi_session = f"{repo}/{worktree}/pi"
-            claude_session = f"{repo}/{worktree}/claude"
-            root_session = f"{repo}/{worktree}"
-            pi_label = "Attach pi session (running)" if tmux_session_exists(pi_session) else "Start pi session"
-            claude_label = "Attach claude session (running)" if tmux_session_exists(claude_session) else "Start claude session"
-            root_label = "Attach worktree root (running)" if tmux_session_exists(root_session) else "Start worktree root"
-            options = [
-                pi_label,
-                claude_label,
-                root_label,
-                "Create sub-session",
-            ]
-        self.menu_state = MenuState(self.current_node, options)
-        lines = ["Select action:"]
-        for idx, option in enumerate(options, start=1):
-            lines.append(f"{idx}) {option}")
-        lines.append("(Esc to cancel)")
-        self._set_status("\n".join(lines))
-
-    async def _handle_menu_choice(self, choice: int) -> None:
-        if not self.menu_state:
-            return
-        node = self.menu_state.node
-        options = self.menu_state.options
-        if choice < 1 or choice > len(options):
-            return
-        self.menu_state = None
-        if node.kind == "project":
-            project = self._project_for_node(node)
-            if not project:
-                await self._refresh_status()
-                return
-            if choice == 1:
-                session = pm_session(project.name, project.is_worktree_repo)
-                cwd = project.path / "main" if project.is_worktree_repo else project.path
-                self._open_session(session, cwd, project.is_worktree_repo, None)
-            elif choice == 2:
-                branch = await self._prompt("New worktree", "branch-name", "create")
-                branch = (branch or "").strip()
-                if branch:
-                    run_command(["dev", "wt", project.name, branch])
-                    await self.action_refresh()
-        else:
-            repo = node.repo
-            worktree = node.worktree or ""
-            project = self._project_for_node(node)
-            project_path = project.path if project else (projects_dir() / repo)
-            cwd = project_path / worktree
-            is_worktree_repo = project.is_worktree_repo if project else True
-            if choice == 1:
-                self._open_session(f"{repo}/{worktree}/pi", cwd, is_worktree_repo, "pi")
-            elif choice == 2:
-                self._open_session(f"{repo}/{worktree}/claude", cwd, is_worktree_repo, "claude")
-            elif choice == 3:
-                self._open_session(f"{repo}/{worktree}", cwd, is_worktree_repo, None)
-            elif choice == 4:
-                sub = await self._prompt("Sub-session name", "name", "open")
-                sub = (sub or "").strip()
-                if sub:
-                    self._open_session(f"{repo}/{worktree}/{sub}", cwd, is_worktree_repo, sub)
-        await self._refresh_status()
-
     async def _default_attach(self) -> None:
         if not self.current_node:
+            return
+        if self.current_node.kind == "session":
+            await self._handle_selection()
+            return
+        if self.current_node.kind == "new-session":
+            await self._handle_selection()
             return
         if self.current_node.kind == "project":
             project = self._project_for_node(self.current_node)
@@ -474,12 +508,37 @@ class CashewApp(App):
             self.current_node = None
             self._set_status("No matches.")
             return
+        tmux_sessions = tmux_list_sessions()
         for project in filtered:
             node = tree.root.add(project.name, expand=True, data=NodeData("project", project.name))
             if project.is_worktree_repo:
                 for worktree in project.worktrees:
                     if query in project.name.lower() or query in worktree.lower():
-                        node.add(worktree, data=NodeData("worktree", project.name, worktree))
+                        wt_node = node.add(worktree, data=NodeData("worktree", project.name, worktree))
+                        sessions = sessions_for_worktree(project.name, worktree, tmux_sessions)
+                        for session in sessions:
+                            label = session.split("/")[-1]
+                            if session == f"{project.name}/{worktree}":
+                                label = "root"
+                            wt_node.add(
+                                label,
+                                data=NodeData(
+                                    "session",
+                                    project.name,
+                                    worktree,
+                                    session=session,
+                                    sub=None if label == "root" else label,
+                                ),
+                            )
+                        wt_node.add("new...", data=NodeData("new-session", project.name, worktree))
+            else:
+                sessions = sessions_for_repo(project.name, tmux_sessions)
+                for session in sessions:
+                    label = session.split("/")[-1]
+                    node.add(
+                        label,
+                        data=NodeData("session", project.name, None, session=session, sub=label),
+                    )
         tree.root.expand()
         first = tree.root.children[0] if tree.root.children else None
         if first and isinstance(first.data, NodeData):
@@ -510,20 +569,26 @@ class CashewApp(App):
             cmd_parts += command
             tmux_inner = " ".join(shlex.quote(part) for part in cmd_parts)
             tmux_cmd = f"bash -lc 'unset TMUX; exec {tmux_inner}'"
-            window_name = f"cashew:{tmux_name}"
-            subprocess.run(
-                ["tmux", "new-window", "-d", "-n", window_name, tmux_cmd],
-                check=False,
-            )
+            window_name = f"cashew-{tmux_name}"
+            if tmux_window_exists(window_name):
+                subprocess.run(["tmux", "select-window", "-t", window_name], check=False)
+            else:
+                subprocess.run(
+                    ["tmux", "new-window", "-d", "-n", window_name, tmux_cmd],
+                    check=False,
+                )
+                subprocess.run(["tmux", "select-window", "-t", window_name], check=False)
             subprocess.run(
                 [
                     "tmux",
                     "display-message",
-                    f"Opened {window_name}. Use prefix+w to switch windows.",
+                    f"Opened {window_name}. Use prefix+w or `cashew` to return to the TUI.",
                 ],
                 check=False,
             )
-            self._set_status(f"Opened {window_name}. Use tmux prefix+w to switch.")
+            self._set_status(
+                f"Opened {window_name}. Use tmux prefix+w or `cashew` to return to the TUI."
+            )
             return
 
         os.execvp("dev", ["dev", session])
@@ -541,8 +606,12 @@ class CashewApp(App):
         try:
             if self.current_node.kind == "project":
                 await self._refresh_project_status(self.current_node)
-            else:
+            elif self.current_node.kind == "worktree":
                 await self._refresh_worktree_status(self.current_node)
+            elif self.current_node.kind == "session":
+                await self._refresh_session_status(self.current_node)
+            elif self.current_node.kind == "new-session":
+                await self._refresh_new_session_status(self.current_node)
         except Exception as exc:
             self._set_status(f"Error: {exc}")
 
@@ -588,6 +657,36 @@ class CashewApp(App):
 
         text = await asyncio.to_thread(collect)
         self._set_status(text)
+
+    async def _refresh_session_status(self, node: NodeData) -> None:
+        session = self._session_from_node(node)
+        if not session:
+            self._set_status("Session not found.")
+            return
+        running = "yes" if tmux_session_exists(session) else "no"
+
+        def collect() -> str:
+            parts = [f"Session: {session}", f"Running: {running}", ""]
+            if session.endswith("/pi"):
+                parts.append("== last message ==")
+                parts.append(run_command(["dev", "pi-status", session, "--messages", "1"]))
+                parts.append("")
+                parts.append("== requirements ==")
+                parts.append(run_command(["dev", "requirements", session]))
+                parts.append("")
+                parts.append("== queue ==")
+                parts.append(run_command(["dev", "queue-status", session, "-m"]))
+            return "\n".join(parts)
+
+        text = await asyncio.to_thread(collect)
+        self._set_status(text)
+
+    async def _refresh_new_session_status(self, node: NodeData) -> None:
+        self._set_status(
+            "New session for "
+            f"{node.repo}/{node.worktree}.\n"
+            "Press Enter to name the sub-session (pi/claude/etc)."
+        )
 
 
 if __name__ == "__main__":
