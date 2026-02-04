@@ -2,38 +2,54 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source_path="${BASH_SOURCE[0]}"
+if command -v realpath >/dev/null 2>&1; then
+    source_path="$(realpath "${BASH_SOURCE[0]}")"
+elif command -v readlink >/dev/null 2>&1; then
+    source_path="$(readlink "${BASH_SOURCE[0]}")"
+fi
+script_dir="$(cd "$(dirname "$source_path")" && pwd)"
 selector="$script_dir/cashew-select"
 status="$script_dir/cashew-status"
 
+session_name="cashew-ui"
+window_name="ui"
+
 ensure_session() {
-    if ! tmux has-session -t cashew 2>/dev/null; then
-        tmux new-session -d -s cashew -n cashew-ui
+    if ! tmux has-session -t "$session_name" 2>/dev/null; then
+        if [ -z "${TMUX:-}" ]; then
+            exec tmux new-session -s "$session_name" -n "$window_name" "bash --noprofile --norc -lc '$selector'" \; \
+                split-window -h -p 60 "bash --noprofile --norc -lc '$status idle; exec tail -f /dev/null'" \; \
+                select-pane -t 0
+        else
+            tmux new-session -d -s "$session_name" -n "$window_name" "bash --noprofile --norc -lc '$selector'"
+            tmux split-window -h -p 60 -t "$session_name:$window_name" "bash --noprofile --norc -lc '$status idle; exec tail -f /dev/null'"
+            tmux select-window -t "$session_name:$window_name" >/dev/null 2>&1 || true
+        fi
+        return
     fi
 
-    if ! tmux list-windows -t cashew -F '#W' | grep -q '^cashew-ui$'; then
-        tmux new-window -t cashew -n cashew-ui
+    if ! tmux list-windows -t "$session_name" -F '#W' | grep -q "^$window_name$"; then
+        tmux new-window -t "$session_name" -n "$window_name" "bash --noprofile --norc -lc '$selector'" >/dev/null 2>&1
+        tmux split-window -h -p 60 -t "$session_name:$window_name" "bash --noprofile --norc -lc '$status idle; exec tail -f /dev/null'" >/dev/null 2>&1
     fi
-
-    tmux select-window -t cashew:cashew-ui
 
     local pane_count
-    pane_count=$(tmux list-panes -t cashew:cashew-ui | wc -l | tr -d ' ')
+    pane_count=$(tmux list-panes -t "$session_name:$window_name" | wc -l | tr -d ' ')
     if [ "$pane_count" -lt 2 ]; then
-        tmux split-window -h -p 60 -t cashew:cashew-ui
+        tmux split-window -h -p 60 -t "$session_name:$window_name" "bash --noprofile --norc -lc '$status idle; exec tail -f /dev/null'" >/dev/null 2>&1
     fi
 
     local left_pane
     local right_pane
-    left_pane=$(tmux list-panes -t cashew:cashew-ui -F '#{pane_id} #{pane_index}' | awk '$2==0 {print $1; exit}')
-    right_pane=$(tmux list-panes -t cashew:cashew-ui -F '#{pane_id} #{pane_index}' | awk '$2==1 {print $1; exit}')
+    left_pane=$(tmux list-panes -t "$session_name:$window_name" -F '#{pane_id} #{pane_index}' | sort -k2 -n | awk 'NR==1 {print $1}')
+    right_pane=$(tmux list-panes -t "$session_name:$window_name" -F '#{pane_id} #{pane_index}' | sort -k2 -n | awk 'NR==2 {print $1}')
 
-    tmux set-option -gq @cashew_left_pane "$left_pane"
-    tmux set-option -gq @cashew_right_pane "$right_pane"
+    tmux respawn-pane -k -t "$left_pane" "bash --noprofile --norc -lc '$selector'"
+    tmux respawn-pane -k -t "$right_pane" "bash --noprofile --norc -lc '$status idle; exec tail -f /dev/null'"
 
-    tmux send-keys -t "$left_pane" "clear; $selector" C-m
-    tmux send-keys -t "$right_pane" "clear; $status idle" C-m
-    tmux select-pane -t "$left_pane"
+    tmux select-window -t "$session_name:$window_name" >/dev/null 2>&1 || true
+    tmux select-pane -t "$left_pane" >/dev/null 2>&1 || true
 }
 
 if ! command -v tmux >/dev/null 2>&1; then
@@ -44,7 +60,7 @@ fi
 ensure_session
 
 if [ -n "${TMUX:-}" ]; then
-    tmux switch-client -t cashew
+    tmux switch-client -t "$session_name"
 else
-    tmux attach -t cashew
+    tmux attach -t "$session_name"
 fi

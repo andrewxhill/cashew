@@ -14,13 +14,17 @@ projects_dir() {
 }
 
 right_pane_id() {
-    local pane
-    pane=$(tmux show-option -gqv @cashew_right_pane || true)
-    if [ -n "$pane" ]; then
-        echo "$pane"
-        return
+    local panes
+    panes=$(tmux list-panes -t cashew-ui:ui -F "#{pane_id} #{pane_index}" 2>/dev/null || true)
+    if [ -z "$panes" ]; then
+        return 0
     fi
-    tmux list-panes -F "#{pane_id} #{pane_index}" | awk '$2==1 {print $1; exit}'
+    echo "$panes" | awk '$2==1 {print $1; exit}'
+}
+
+is_worktree_repo() {
+    local repo="$1"
+    [ -d "$(projects_dir)/$repo/.bare" ]
 }
 
 list_tmux_sessions() {
@@ -57,45 +61,59 @@ sessions_for_repo() {
     done
 }
 
-list_entries() {
+list_projects() {
     local root
     root=$(projects_dir)
     [ -d "$root" ] || return
-
-    local tmux_sessions
-    tmux_sessions=$(list_tmux_sessions)
 
     local repo
     for repo in $(ls -1 "$root" 2>/dev/null | sort); do
         [ -d "$root/$repo" ] || continue
         [ "$repo" = "dev" ] && continue
-
-        if [ -d "$root/$repo/.bare" ]; then
-            printf "project\t%s\t\t\t%s\n" "$repo" "$repo"
-            local worktree
-            for worktree in $(ls -1 "$root/$repo" 2>/dev/null | sort); do
-                [ -d "$root/$repo/$worktree" ] || continue
-                [ "$worktree" = ".bare" ] && continue
-                printf "worktree\t%s\t%s\t\t  %s\n" "$repo" "$worktree" "$worktree"
-                sessions_for_worktree "$repo" "$worktree" <<<"$tmux_sessions" | sort | while read -r session; do
-                    [ -z "$session" ] && continue
-                    local label="${session##*/}"
-                    if [ "$session" = "$repo/$worktree" ]; then
-                        label="root"
-                    fi
-                    printf "session\t%s\t%s\t%s\t    %s\n" "$repo" "$worktree" "$session" "$label"
-                done
-                printf "new-session\t%s\t%s\t\t    new...\n" "$repo" "$worktree"
-            done
-        else
-            printf "project\t%s\t\t\t%s\n" "$repo" "$repo"
-            sessions_for_repo "$repo" <<<"$tmux_sessions" | sort | while read -r session; do
-                [ -z "$session" ] && continue
-                local label="${session##*/}"
-                printf "session\t%s\t\t%s\t  %s\n" "$repo" "$session" "$label"
-            done
-        fi
+        printf "project\t%s\t\t\t[proj] %s\n" "$repo" "$repo"
     done
+}
+
+list_worktrees() {
+    local repo="$1"
+    local root
+    root=$(projects_dir)
+    if ! is_worktree_repo "$repo"; then
+        return
+    fi
+
+    local worktree
+    for worktree in $(ls -1 "$root/$repo" 2>/dev/null | sort); do
+        [ -d "$root/$repo/$worktree" ] || continue
+        [ "$worktree" = ".bare" ] && continue
+        printf "worktree\t%s\t%s\t\t[wt] %s\n" "$repo" "$worktree" "$worktree"
+    done
+}
+
+list_sessions() {
+    local repo="$1"
+    local worktree="$2"
+    local tmux_sessions
+    tmux_sessions=$(list_tmux_sessions)
+
+    if [ -n "$worktree" ]; then
+        sessions_for_worktree "$repo" "$worktree" <<<"$tmux_sessions" | sort | while read -r session; do
+            [ -z "$session" ] && continue
+            local label="${session##*/}"
+            if [ "$session" = "$repo/$worktree" ]; then
+                label="root"
+            fi
+            printf "session\t%s\t%s\t%s\t[sess] %s\n" "$repo" "$worktree" "$session" "$label"
+        done
+        printf "new-session\t%s\t%s\t\t[new] new...\n" "$repo" "$worktree"
+    else
+        sessions_for_repo "$repo" <<<"$tmux_sessions" | sort | while read -r session; do
+            [ -z "$session" ] && continue
+            local label="${session##*/}"
+            printf "session\t%s\t\t%s\t[sess] %s\n" "$repo" "$session" "$label"
+        done
+        printf "new-session\t%s\t\t\t[new] new...\n" "$repo"
+    fi
 }
 
 update_right() {
@@ -108,8 +126,8 @@ update_right() {
     [ -n "$pane" ] || return
 
     local cmd_line
-    cmd_line=$(printf "%q " "$status_cmd" status "$type" "$repo" "$worktree" "$session")
-    tmux respawn-pane -k -t "$pane" "bash -lc \"${cmd_line}\""
+    cmd_line=$(printf "%q " "$status_cmd" "$type" "$repo" "$worktree" "$session")
+    tmux respawn-pane -k -t "$pane" "bash --noprofile --norc -c \"${cmd_line}; exec tail -f /dev/null\""
 }
 
 open_session() {
@@ -157,7 +175,7 @@ open_session() {
     elif [ "$sub" = "claude" ]; then
         cmd+=("claude" "--dangerously-skip-permissions")
     else
-        if [ -d "$root/$repo/.bare" ]; then
+        if is_worktree_repo "$repo"; then
             cmd+=("pi")
         else
             cmd+=("claude" "--dangerously-skip-permissions")
@@ -166,7 +184,7 @@ open_session() {
 
     local cmd_line
     cmd_line=$(printf "%q " "${cmd[@]}")
-    tmux respawn-pane -k -t "$pane" "bash -lc 'unset TMUX; exec ${cmd_line}'"
+    tmux respawn-pane -k -t "$pane" "bash --noprofile --norc -c 'unset TMUX; exec ${cmd_line}'"
     tmux select-pane -t "$pane"
 }
 
@@ -206,17 +224,120 @@ case "${1:-}" in
         ;;
 esac
 
+level="projects"
+repo=""
+worktree=""
+
 while true; do
-    if ! list_entries | fzf \
-        --ansi \
-        --delimiter=$'\t' \
-        --with-nth=5 \
-        --bind "start:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})" \
-        --bind "change:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})" \
-        --bind "enter:execute-silent($script_dir/cashew-select open {1} {2} {3} {4})" \
-        --prompt="Cashew> " \
-        --header="Enter to attach; type to filter; Ctrl-C to exit"; then
+    entries_file=$(mktemp)
+    case "$level" in
+        projects)
+            list_projects >"$entries_file"
+            header="Projects · Enter open · Ctrl-H back · Ctrl-Q quit"
+            ;;
+        worktrees)
+            list_worktrees "$repo" >"$entries_file"
+            header="Worktrees for $repo · Enter open · Ctrl-H back · Ctrl-Q quit"
+            ;;
+        sessions)
+            list_sessions "$repo" "$worktree" >"$entries_file"
+            header="Sessions for $repo/$worktree · Enter attach · Ctrl-H back · Ctrl-Q quit"
+            if ! is_worktree_repo "$repo"; then
+                header="Sessions for $repo · Enter attach · Ctrl-H back · Ctrl-Q quit"
+            fi
+            ;;
+    esac
+
+    if [ ! -s "$entries_file" ]; then
+        rm -f "$entries_file"
         exit 0
     fi
 
+    first_line=$(head -n 1 "$entries_file")
+    if [ -n "$first_line" ]; then
+        IFS=$'\t' read -r type repo_field worktree_field session_field _label <<<"$first_line"
+        update_right "$type" "$repo_field" "$worktree_field" "$session_field"
+    fi
+
+    set +e
+    result=$(cat "$entries_file" | fzf \
+        --ansi \
+        --delimiter=$'\t' \
+        --with-nth=5 \
+        --expect=ctrl-q,ctrl-h \
+        --bind "change:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})" \
+        --bind "up:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+up" \
+        --bind "down:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+down" \
+        --bind "pgup:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+page-up" \
+        --bind "pgdn:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+page-down" \
+        --bind "home:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+first" \
+        --bind "end:execute-silent($script_dir/cashew-select update {1} {2} {3} {4})+last" \
+        --bind "ctrl-n:down,ctrl-p:up,j:down,k:up" \
+        --prompt="Cashew> " \
+        --header="$header" \
+        --color="fg:252,fg+:255,bg+:236,hl:109,hl+:109,prompt:110,marker:148,info:245,border:238")
+    fzf_status=$?
+    set -e
+
+    mapfile -t lines <<<"$result"
+    key="${lines[0]:-}"
+    selection="${lines[1]:-}"
+    if [ -z "$selection" ] && [ -n "$key" ] && [ "$key" != "ctrl-q" ] && [ "$key" != "ctrl-h" ]; then
+        selection="$key"
+        key=""
+    fi
+
+    rm -f "$entries_file"
+
+    if [ "$key" = "ctrl-q" ]; then
+        tmux kill-session -t cashew-ui
+        exit 0
+    fi
+
+    if [ -z "$selection" ]; then
+        if [ "$fzf_status" -ne 0 ]; then
+            sleep 0.2
+            continue
+        fi
+        exit 0
+    fi
+
+    if [ "$key" = "ctrl-h" ]; then
+        if [ "$level" = "sessions" ]; then
+            if is_worktree_repo "$repo"; then
+                level="worktrees"
+            else
+                level="projects"
+            fi
+            continue
+        fi
+        if [ "$level" = "worktrees" ]; then
+            level="projects"
+            continue
+        fi
+    fi
+
+    IFS=$'\t' read -r type repo_field worktree_field session_field _label <<<"$selection"
+
+    if [ "$level" = "projects" ]; then
+        repo="$repo_field"
+        if is_worktree_repo "$repo"; then
+            level="worktrees"
+        else
+            worktree=""
+            level="sessions"
+        fi
+        continue
+    fi
+
+    if [ "$level" = "worktrees" ]; then
+        worktree="$worktree_field"
+        level="sessions"
+        continue
+    fi
+
+    if [ "$level" = "sessions" ]; then
+        open_session "$type" "$repo_field" "$worktree_field" "$session_field"
+        continue
+    fi
 done

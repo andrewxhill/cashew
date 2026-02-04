@@ -238,6 +238,27 @@ redis-cli ping
 - DATABASE_URL is set but database isn't running
 - Fix: Start the database containers before pushing
 
+## Trading Opportunities API
+
+**NEVER submit opportunities to the API unless the user EXPLICITLY says "submit", "insert", "create it", or similar.**
+
+When the user shares opportunity data or asks to "run it through" or "test it":
+- Show a dry-run of the payload
+- Validate the format
+- Ask for explicit confirmation before submitting
+
+```bash
+# ❌ FORBIDDEN - Never auto-submit
+curl -X POST .../opportunities -d '...'
+
+# ✅ CORRECT - Show what WOULD be submitted, ask first
+echo "This would submit:"
+cat payload.json
+echo "Submit this? (user must explicitly confirm)"
+```
+
+This applies to ANY write operation against trading/ops APIs.
+
 ## Git Preferences
 
 - Never use HTTPS URLs which require interactive authentication
