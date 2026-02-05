@@ -646,6 +646,124 @@ review_loop() {
     echo "  7) Do NOT write scripts, nohup, or background loops"
 }
 
+reboot_sessions() {
+    local dry_run=0
+    if [ "${1:-}" = "--dry-run" ]; then
+        dry_run=1
+        shift
+    fi
+
+    if ! command -v tmux >/dev/null 2>&1; then
+        echo "tmux is required for dev reboot"
+        exit 1
+    fi
+
+    echo -e "${BOLD}Rebooting sessions${RESET}"
+    echo ""
+
+    # Hub sessions
+    if ! tmux has-session -t "hub${SEP}pi" 2>/dev/null; then
+        if [ "$dry_run" -eq 1 ]; then
+            echo "Would create: hub/pi"
+        else
+            tmux new-session -d -s "hub${SEP}pi" -c "$PROJECTS_DIR"
+            tmux send-keys -t "hub${SEP}pi" "pi" C-m
+            echo "Created: hub/pi"
+        fi
+    fi
+    if ! tmux has-session -t "hub${SEP}claude" 2>/dev/null; then
+        if [ "$dry_run" -eq 1 ]; then
+            echo "Would create: hub/claude"
+        else
+            tmux new-session -d -s "hub${SEP}claude" -c "$PROJECTS_DIR"
+            tmux send-keys -t "hub${SEP}claude" "claude --dangerously-skip-permissions" C-m
+            echo "Created: hub/claude"
+        fi
+    fi
+
+    for dir in "$PROJECTS_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        local project
+        project=$(basename "$dir")
+        [[ "$project" == "dev" ]] && continue
+
+        if [ -d "$dir/.bare" ]; then
+            # Main worktree gets claude + pi sessions
+            if [ -d "$dir/main" ]; then
+                local main_claude
+                local main_pi
+                main_claude="${project}${SEP}main${SEP}claude"
+                main_pi="${project}${SEP}main${SEP}pi"
+                if ! tmux has-session -t "$main_claude" 2>/dev/null; then
+                    if [ "$dry_run" -eq 1 ]; then
+                        echo "Would create: $project/main/claude"
+                    else
+                        tmux new-session -d -s "$main_claude" -c "$dir/main"
+                        tmux send-keys -t "$main_claude" "claude --dangerously-skip-permissions" C-m
+                        echo "Created: $project/main/claude"
+                    fi
+                fi
+                if ! tmux has-session -t "$main_pi" 2>/dev/null; then
+                    if [ "$dry_run" -eq 1 ]; then
+                        echo "Would create: $project/main/pi"
+                    else
+                        tmux new-session -d -s "$main_pi" -c "$dir/main"
+                        tmux send-keys -t "$main_pi" "pi" C-m
+                        echo "Created: $project/main/pi"
+                    fi
+                fi
+            fi
+
+            # Other worktrees: pi sessions
+            for wt_dir in "$dir"/*/; do
+                [ -d "$wt_dir" ] || continue
+                local worktree
+                worktree=$(basename "$wt_dir")
+                [[ "$worktree" == ".bare" ]] && continue
+                [[ "$worktree" == "main" ]] && continue
+
+                local pi_session
+                pi_session="${project}${SEP}${worktree}${SEP}pi"
+                if tmux has-session -t "$pi_session" 2>/dev/null; then
+                    continue
+                fi
+
+                if [ "$dry_run" -eq 1 ]; then
+                    echo "Would create: $project/$worktree/pi"
+                else
+                    tmux new-session -d -s "$pi_session" -c "$wt_dir"
+                    tmux send-keys -t "$pi_session" "pi" C-m
+                    echo "Created: $project/$worktree/pi"
+                fi
+            done
+        else
+            # Regular repo: claude + pi sessions
+            local repo_claude
+            local repo_pi
+            repo_claude="${project}${SEP}claude"
+            repo_pi="${project}${SEP}pi"
+            if ! tmux has-session -t "$repo_claude" 2>/dev/null; then
+                if [ "$dry_run" -eq 1 ]; then
+                    echo "Would create: $project/claude"
+                else
+                    tmux new-session -d -s "$repo_claude" -c "$dir"
+                    tmux send-keys -t "$repo_claude" "claude --dangerously-skip-permissions" C-m
+                    echo "Created: $project/claude"
+                fi
+            fi
+            if ! tmux has-session -t "$repo_pi" 2>/dev/null; then
+                if [ "$dry_run" -eq 1 ]; then
+                    echo "Would create: $project/pi"
+                else
+                    tmux new-session -d -s "$repo_pi" -c "$dir"
+                    tmux send-keys -t "$repo_pi" "pi" C-m
+                    echo "Created: $project/pi"
+                fi
+            fi
+        fi
+    done
+}
+
 requirements() {
     local input="$1"
     shift
@@ -1356,6 +1474,9 @@ case "${1:-}" in
     "review-loop")
         review_loop
         ;;
+    "reboot")
+        reboot_sessions "${@:2}"
+        ;;
     "ls"|"list")
         list_projects
         ;;
@@ -1380,6 +1501,7 @@ case "${1:-}" in
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
         echo "  dev review-loop               Print PM review loop checklist"
+        echo "  dev reboot [--dry-run]        Recreate baseline sessions after reboot"
         echo ""
         echo "Examples:"
         echo "  dev hub                       # root session at ~/projects"
@@ -1396,6 +1518,8 @@ case "${1:-}" in
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
         echo "  dev requirements replay/main/pi          # view session requirements"
         echo "  dev review-loop                          # print PM review loop"
+        echo "  dev reboot --dry-run                     # show sessions to recreate"
+        echo "  dev reboot                               # recreate baseline sessions"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
         echo ""
         echo "Reminder: Read the last agent message before nudging:"

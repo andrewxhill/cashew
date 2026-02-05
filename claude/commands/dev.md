@@ -34,6 +34,7 @@ dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
 dev send <session> <keys>         # Send raw tmux keys (direct input)
 dev send-pi <session> <message>   # Queue a message for a Pi agent (preferred)
+dev reboot [--dry-run]            # Recreate baseline sessions after reboot
 ```
 
 ## Project Structure
@@ -166,7 +167,8 @@ Quick version:
 
 1. Always use sub-sessions for long-running processes (Claude, servers)
 2. Use `dev send-pi <session> <message>` when messaging worktree agents; it queues safely. Use `dev send` only for raw keystrokes.
-3. The session persists even if you close SSH or terminal
-4. Use `dev` with no args to see all projects and active sessions
-5. Worktree repos let you work on multiple branches simultaneously
-6. Main Claude is your "project manager" - use it to orchestrate features
+3. After reboot, run `dev reboot` to recreate baseline sessions (hub pi/claude, repo main pi/claude, feature worktree pi).
+4. The session persists even if you close SSH or terminal (until reboot)
+5. Use `dev` with no args to see all projects and active sessions
+6. Worktree repos let you work on multiple branches simultaneously
+7. Main Claude is your "project manager" - use it to orchestrate features
