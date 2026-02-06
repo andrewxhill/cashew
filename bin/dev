@@ -113,7 +113,7 @@ list_projects() {
 
                 # Check for sessions (using -- separator)
                 session_prefix="${project}${SEP}${wt}"
-                wt_sessions=$(echo "$sessions" | grep "^${session_prefix}" || true)
+                wt_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
                 if [ -n "$wt_sessions" ]; then
                     echo -e "      ${GREEN}●${RESET} ${CYAN}$wt${RESET}"
                     echo "$wt_sessions" | while read -r sess; do
@@ -133,7 +133,7 @@ list_projects() {
         else
             # Regular repo
             session_prefix="${project}"
-            project_sessions=$(echo "$sessions" | grep "^${session_prefix}" || true)
+            project_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
             if [ -n "$project_sessions" ]; then
                 echo -e "  ${GREEN}●${RESET} ${BOLD}$project${RESET}"
                 echo "$project_sessions" | while read -r sess; do
@@ -274,6 +274,16 @@ attach_session() {
     if [ "$backend" = "tmux" ]; then
         tmux attach -t "$session_name"
         return
+    fi
+
+    # If no sub specified on a worktree repo, check for existing pi sub-session
+    if [ -z "$sub" ] && [ -d "$repo_dir/.bare" ]; then
+        local pi_sub="${session_name}${SEP}pi"
+        if [ "$(session_backend "$pi_sub")" = "tmux" ]; then
+            echo -e "Attaching to existing pi sub-session: ${GREEN}$(to_display_name "$pi_sub")${RESET}"
+            tmux attach -t "$pi_sub"
+            return
+        fi
     fi
 
     # Create new session detached (safe for non-interactive callers)
@@ -452,7 +462,7 @@ cleanup_worktree() {
 
     # Kill base session and all sub-sessions (e.g., repo_wt_pi, repo_wt_claude)
     local sess
-    for sess in $(get_all_sessions | grep "^${session_name}"); do
+    for sess in $(get_all_sessions | grep -E "^${session_name}($|${SEP})"); do
         tmux kill-session -t "$sess" 2>/dev/null || true
     done
 

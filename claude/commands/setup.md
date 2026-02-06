@@ -93,22 +93,33 @@ if ! command -v fzf >/dev/null 2>&1; then
 fi
 ```
 
-## Step 5: Install Claude Config
+## Step 5: Symlink Claude Config
+
+Symlink from the cloned repo so updates via `git pull` take effect immediately:
 
 ```bash
 mkdir -p ~/.claude/commands
 
-# Download and install - then edit to match user's folder
-curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/claude/global/CLAUDE.md > ~/.claude/CLAUDE.md
-curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/claude/commands/dev.md > ~/.claude/commands/dev.md
-curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/claude/commands/setup.md > ~/.claude/commands/setup.md
-
-# Update paths in CLAUDE.md if folder isn't ~/projects
-sed -i '' 's|~/projects|~/<folder-name>|g' ~/.claude/CLAUDE.md
-sed -i '' 's|~/projects|~/<folder-name>|g' ~/.claude/commands/dev.md
+# Symlink global config and skills from the repo
+ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/global/CLAUDE.md ~/.claude/CLAUDE.md
+ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/dev.md ~/.claude/commands/dev.md
+ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/setup.md ~/.claude/commands/setup.md
 ```
 
-## Step 6: Configure Git for SSH
+## Step 6: Install Pi Message Queue Extension
+
+The message-queue extension lets `dev send-pi` deliver messages to running pi agents. Install it globally so it loads in every pi session:
+
+```bash
+# Requires pi to be installed: npm install -g @mariozechner/pi-coding-agent
+pi install ~/<folder-name-from-step-1>/cashew/main/pi/extensions/message-queue.ts
+
+# Verify
+pi list
+# Should show: message-queue.ts under "User packages"
+```
+
+## Step 7: Configure Git for SSH (if needed)
 
 ```bash
 # Generate SSH key if needed
@@ -128,7 +139,7 @@ echo ""
 echo "Or run: gh auth login && gh ssh-key add ~/.ssh/id_ed25519.pub"
 ```
 
-## Step 7: (If requested) Enable SSH Remote Access
+## Step 8: (If requested) Enable SSH Remote Access
 
 ```bash
 # macOS
@@ -138,7 +149,7 @@ sudo systemsetup -setremotelogin on
 sudo systemctl enable ssh && sudo systemctl start ssh
 ```
 
-## Step 8: Verify Installation
+## Step 9: Verify Installation
 
 ```bash
 docker --version
@@ -148,6 +159,7 @@ tmux -V
 fzf --version
 dev --help
 cashew
+pi list          # should show message-queue.ts
 ssh -T git@github.com
 ```
 
@@ -157,7 +169,8 @@ ssh -T git@github.com
 |-----------|----------|---------|
 | dev script | `/usr/local/bin/dev` | Project session manager (symlink to repo) |
 | cashew launcher | `/usr/local/bin/cashew` | tmux + fzf TUI launcher (symlink to repo) |
-| Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions |
-| /dev skill | `~/.claude/commands/dev.md` | Full dev documentation |
-| /setup skill | `~/.claude/commands/setup.md` | This bootstrap skill |
+| Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions (symlink to repo) |
+| /dev skill | `~/.claude/commands/dev.md` | Full dev documentation (symlink to repo) |
+| /setup skill | `~/.claude/commands/setup.md` | This bootstrap skill (symlink to repo) |
+| Pi message-queue | `pi list` (user package) | Enables `dev send-pi` to deliver messages to pi agents |
 | Projects folder | `~/<user-choice>` | Where all projects live |
