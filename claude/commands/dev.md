@@ -4,7 +4,9 @@ Use the `dev` command to manage tmux-backed project sessions in `~/projects/`.
 
 **Note:** Session names use `_` internally, but you always type `/` in commands.
 
-**Auto-start:** New worktree sessions start `pi` automatically; non-worktree repo sessions start `claude --dangerously-skip-permissions`.
+**Auto-start:** New sessions start their auto-command (`pi` for worktrees, `claude` for regular repos) automatically.
+**Detached by default:** Creating a new session always creates it detached and prints how to attach. Running `dev` against an existing session attaches to it. This means agents can safely create sessions without needing a terminal.
+**Pi runs in sub-sessions:** Pi always runs in `/pi` sub-sessions (e.g., `dev repo/worktree/pi`), not the base session. This is consistent across `dev wt`, `dev reboot`, and manual session creation.
 **Important:** For worktree agents, use `/pi` sub-sessions (not `/claude`) so message tools target the correct agent session.
 **Rule:** Never nudge a worktree agent without reading its last message first:
 ```bash
@@ -89,16 +91,15 @@ dev myapp                    # opens main worktree
 
 ### Working on a feature branch
 ```bash
-dev wt myapp feature-auth    # create worktree
-dev myapp/feature-auth       # open session (pi auto-starts)
-dev myapp/feature-auth/pi     # preferred pi sub-session
+dev wt myapp feature-auth    # create worktree + start pi in /pi sub-session (detached)
+dev myapp/feature-auth/pi    # attach to pi sub-session
 ```
 
 ### SSH reconnection
 ```bash
 ssh myserver
 dev                          # see what's running
-dev myapp/main/pi            # reconnect to Pi session (preferred)
+dev myapp/main/pi            # attach to existing Pi session
 ```
 
 ## Worktree Workflow
@@ -108,11 +109,12 @@ Worktree branches are local by default. You do **not** need to push them to a re
 **Main session = orchestrator**, feature sessions = focused implementation.
 
 ### Starting a feature
-1. In main Claude session, create worktree:
+1. In main Claude session, create worktree (pi starts detached in `/pi` sub-session):
    ```bash
    dev wt <repo> <feature-branch>
+   # Output: pi started in session: dev <repo>/<feature-branch>/pi (detached)
    ```
-2. User switches to feature session: `dev <repo>/<feature>/pi`
+2. User attaches to feature session: `dev <repo>/<feature-branch>/pi`
 3. Feature Claude: implement and commit locally
 
 ### Completing a feature

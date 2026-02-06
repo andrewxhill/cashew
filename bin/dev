@@ -276,15 +276,15 @@ attach_session() {
         return
     fi
 
+    # Create new session detached (safe for non-interactive callers)
+    tmux new-session -d -s "$session_name" -c "$target_dir"
     if [ ${#auto_command[@]} -gt 0 ]; then
-        tmux new-session -d -s "$session_name" -c "$target_dir"
         local cmd_line
         cmd_line="${auto_command[*]}"
         tmux send-keys -t "$session_name" "$cmd_line" C-m
-        tmux attach -t "$session_name"
-    else
-        tmux new-session -s "$session_name" -c "$target_dir"
     fi
+    echo -e "${GREEN}Started:${RESET} $display_name (detached)"
+    echo -e "Attach with: ${CYAN}dev $display_name${RESET}"
 }
 
 new_project() {
@@ -332,12 +332,9 @@ new_project() {
     echo "  └── main/      (default branch worktree)"
     echo ""
     echo "Commands:"
-    echo "  dev $name                    # open main worktree (pi auto-starts)"
-    echo "  dev $name/main/pi            # pi sub-session"
-    echo "  dev $name/main/pi            # pi sub-session (preferred)"
+    echo "  dev $name/main/pi            # create or attach pi sub-session"
     echo "  dev $name/main/claude        # claude sub-session"
-    echo "  dev wt $name feature-x       # add feature-x worktree"
-    echo "  dev $name/feature-x          # open that worktree (pi auto-starts)"
+    echo "  dev wt $name feature-x       # add feature-x worktree (pi starts detached)"
 }
 
 add_worktree() {
@@ -371,11 +368,12 @@ add_worktree() {
         git --git-dir=.bare worktree add -b "$branch" "$branch" "$base"
     fi
 
-    local session_name="${repo}${SEP}${branch}"
+    local pi_session="${repo}${SEP}${branch}${SEP}pi"
     local started_pi=0
     if command -v tmux >/dev/null 2>&1 && command -v pi >/dev/null 2>&1; then
-        if [ -z "$(session_backend "$session_name")" ]; then
-            tmux new-session -d -s "$session_name" -c "$repo_dir/$branch" pi
+        if [ -z "$(session_backend "$pi_session")" ]; then
+            tmux new-session -d -s "$pi_session" -c "$repo_dir/$branch"
+            tmux send-keys -t "$pi_session" "pi" C-m
             started_pi=1
         fi
     fi
@@ -383,11 +381,9 @@ add_worktree() {
     echo ""
     echo -e "${GREEN}Worktree created!${RESET}"
     if [ "$started_pi" -eq 1 ]; then
-        echo "  pi started in session: dev $repo/$branch"
+        echo -e "  pi started in session: ${CYAN}dev $repo/$branch/pi${RESET} (detached)"
     fi
-    echo "  dev $repo/$branch            # open it (pi auto-starts)"
-    echo "  dev $repo/$branch/pi         # pi sub-session"
-    echo "  dev $repo/$branch/pi         # pi sub-session (preferred)"
+    echo "  dev $repo/$branch/pi         # attach to pi sub-session"
     echo "  dev $repo/$branch/claude     # claude sub-session"
 }
 
@@ -448,15 +444,17 @@ cleanup_worktree() {
     local session_name="${repo}${SEP}${worktree}"
 
     if [ "$dry_run" -eq 1 ]; then
-        echo "Would kill session: $session_name"
+        echo "Would kill sessions matching: $session_name*"
         echo "Would remove worktree: $wt_dir"
         echo "Would delete branch: $worktree"
         return
     fi
 
-    if session_backend "$session_name" >/dev/null 2>&1; then
-        tmux kill-session -t "$session_name" 2>/dev/null || true
-    fi
+    # Kill base session and all sub-sessions (e.g., repo_wt_pi, repo_wt_claude)
+    local sess
+    for sess in $(get_all_sessions | grep "^${session_name}"); do
+        tmux kill-session -t "$sess" 2>/dev/null || true
+    done
 
     (cd "$repo_dir" && git --git-dir=.bare worktree remove "$worktree")
     (cd "$repo_dir" && git --git-dir=.bare branch -D "$worktree")
@@ -1412,15 +1410,15 @@ hub_session() {
         return
     fi
 
+    # Create new session detached (safe for non-interactive callers)
+    tmux new-session -d -s "$session_name" -c "$target_dir"
     if [ ${#auto_command[@]} -gt 0 ]; then
-        tmux new-session -d -s "$session_name" -c "$target_dir"
         local cmd_line
         cmd_line="${auto_command[*]}"
         tmux send-keys -t "$session_name" "$cmd_line" C-m
-        tmux attach -t "$session_name"
-    else
-        tmux new-session -s "$session_name" -c "$target_dir"
     fi
+    echo -e "${GREEN}Started:${RESET} $display_name (detached)"
+    echo -e "Attach with: ${CYAN}dev $display_name${RESET}"
 }
 
 # Main

@@ -13,12 +13,11 @@ This environment uses `dev` - a session manager for projects in `~/projects/`.
 **Common commands:**
 ```bash
 dev                           # List projects and sessions
-dev <repo>                    # Open main worktree session
+dev <repo>                    # Create detached if new, attach if exists
 
-dev <repo>/<worktree>         # Open specific worktree (pi auto-starts)
-dev <repo>/<worktree>/pi      # Preferred pi sub-session
-dev wt <repo> <branch>        # Add new worktree
-dev cleanup <repo>/<worktree> # Remove worktree + branch + session
+dev <repo>/<worktree>/pi      # Create detached if new, attach if exists
+dev wt <repo> <branch>        # Add worktree + start pi in /pi sub-session (detached)
+dev cleanup <repo>/<worktree> # Remove worktree + branch + all sessions
 dev kill <session>            # Kill a session
 dev pi-status <session>       # Check agent status/last messages
 dev queue-status <session> -m # Check pending queue
@@ -51,7 +50,7 @@ Worktree branches are local by default. You do **not** need to push them to remo
 
 ### If you're in `main` worktree → You're the orchestrator
 - Explore codebase, plan features
-- Create worktrees for new features: `dev wt <repo> <feature>`
+- Create worktrees for new features: `dev wt <repo> <feature>` (pi starts detached in `/pi` sub-session)
 - After features complete: merge locally, then full cleanup:
   ```bash
   # Merge the feature branch locally
@@ -61,7 +60,7 @@ Worktree branches are local by default. You do **not** need to push them to remo
   # 1. Kill Docker environment for the feature
   COMPOSE_PROJECT_NAME=<repo>-<feature> docker compose down -v
 
-  # 2. Remove worktree + branch + session
+  # 2. Remove worktree + branch + all sessions
   dev cleanup <repo>/<feature>
   ```
 - You manage the big picture
