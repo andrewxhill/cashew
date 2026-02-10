@@ -42,6 +42,15 @@ Run it in the foreground, then return to step 1 and repeat. Do **not** write scr
 
 Only review commits once the agent confirms it's done or asks for review.
 
+## Update Cashew (recommended)
+
+Periodically update Cashew so you have the latest skills/commands:
+
+```bash
+cd ~/projects/cashew/main 2>/dev/null || cd ~/Projects/cashew/main
+git pull
+```
+
 ## Worktree Workflow
 
 Worktree branches are local by default. You do **not** need to push them to remote to coordinate. Merge locally into `main` when ready.
