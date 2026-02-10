@@ -211,8 +211,10 @@ cashew/
 │   └── dev                      # Project session manager CLI
 ├── .claude/
 │   └── skills/
-│       └── setup/
-│           └── SKILL.md         # /setup skill for bootstrapping
+│       ├── setup/
+│       │   └── SKILL.md         # /setup skill for bootstrapping
+│       └── prompting-worktree-agents/
+│           └── SKILL.md         # Socratic prompting loop for worktree agents
 ├── claude/
 │   ├── global/
 │   │   └── CLAUDE.md            # Global context for all Claude sessions

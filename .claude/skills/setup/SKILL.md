@@ -93,17 +93,29 @@ if ! command -v fzf >/dev/null 2>&1; then
 fi
 ```
 
-## Step 5: Symlink Claude Config
+## Step 5: Install Claude Config (Append Cashew Block)
 
-Symlink from the cloned repo so updates via `git pull` take effect immediately:
+Append Cashew's global context block to the end of the user's `~/.claude/CLAUDE.md` (do **not** overwrite). Only add it if the block isn't already present:
 
 ```bash
 mkdir -p ~/.claude/commands
 
-# Symlink global config and skills from the repo
-ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/global/CLAUDE.md ~/.claude/CLAUDE.md
+CASHEW_BLOCK=~/<folder-name-from-step-1>/cashew/main/claude/global/CLAUDE.md
+TARGET=~/.claude/CLAUDE.md
+
+if ! grep -q "BEGIN CASHEW GLOBAL CONTEXT" "$TARGET" 2>/dev/null; then
+  {
+    echo ""
+    echo "<!-- BEGIN CASHEW GLOBAL CONTEXT -->"
+    cat "$CASHEW_BLOCK"
+    echo "<!-- END CASHEW GLOBAL CONTEXT -->"
+  } >> "$TARGET"
+fi
+
+# Symlink commands and skills from the repo
 ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/dev.md ~/.claude/commands/dev.md
 ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/setup ~/.claude/skills/setup
+ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/prompting-worktree-agents ~/.claude/skills/prompting-worktree-agents
 ```
 
 ## Step 6: Install Pi Message Queue Extension
@@ -169,8 +181,9 @@ ssh -T git@github.com
 |-----------|----------|---------|
 | dev script | `/usr/local/bin/dev` | Project session manager (symlink to repo) |
 | cashew launcher | `/usr/local/bin/cashew` | tmux + fzf TUI launcher (symlink to repo) |
-| Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions (symlink to repo) |
+| Global Claude config | `~/.claude/CLAUDE.md` | Cashew block appended (idempotent) |
 | /dev skill | `~/.claude/commands/dev.md` | Full dev documentation (symlink to repo) |
 | /setup skill | `~/.claude/skills/setup/` | This bootstrap skill (symlink to repo) |
+| /prompting-worktree-agents skill | `~/.claude/skills/prompting-worktree-agents/` | Socratic prompting loop for worktree agents |
 | Pi message-queue | `pi list` (user package) | Enables `dev send-pi` to deliver messages to pi agents |
 | Projects folder | `~/<user-choice>` | Where all projects live |
