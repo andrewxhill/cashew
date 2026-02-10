@@ -213,8 +213,10 @@ cashew/
 │   └── skills/
 │       ├── setup/
 │       │   └── SKILL.md         # /setup skill for bootstrapping
-│       └── prompting-worktree-agents/
-│           └── SKILL.md         # Socratic prompting loop for worktree agents
+│       ├── prompting-worktree-agents/
+│       │   └── SKILL.md         # Socratic prompting loop for worktree agents
+│       └── repo-quality-rails-setup/
+│           └── SKILL.md         # Optional quality gates setup skill
 ├── claude/
 │   ├── global/
 │   │   └── CLAUDE.md            # Global context for all Claude sessions

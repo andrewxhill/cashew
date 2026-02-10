@@ -13,6 +13,7 @@ Before doing anything, ask:
 1. **What should your projects folder be called?** (default: `~/projects`)
 2. **What's your GitHub email?** (for SSH key)
 3. **Do you want SSH remote access enabled?** (for headless servers)
+4. **Install the optional Repo Quality Rails Setup skill?** (installs the quality-gates skill content)
 
 Use the AskUserQuestion tool for this.
 
@@ -117,6 +118,9 @@ fi
 ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/dev.md ~/.claude/commands/dev.md
 ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/setup ~/.claude/skills/setup
 ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/prompting-worktree-agents ~/.claude/skills/prompting-worktree-agents
+
+# Optional: Repo Quality Rails Setup skill (only if user opted in)
+ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/repo-quality-rails-setup ~/.claude/skills/repo-quality-rails-setup
 ```
 
 ## Step 6: Install Pi Message Queue Extension
@@ -186,5 +190,6 @@ ssh -T git@github.com
 | /dev skill | `~/.claude/commands/dev.md` | Full dev documentation (symlink to repo) |
 | /setup skill | `~/.claude/skills/setup/` | This bootstrap skill (symlink to repo) |
 | /prompting-worktree-agents skill | `~/.claude/skills/prompting-worktree-agents/` | Socratic prompting loop for worktree agents |
+| /repo-quality-rails-setup skill | `~/.claude/skills/repo-quality-rails-setup/` | Optional quality-gates setup skill |
 | Pi message-queue | `pi list` (user package) | Enables `dev send-pi` to deliver messages to pi agents |
 | Projects folder | `~/<user-choice>` | Where all projects live |
