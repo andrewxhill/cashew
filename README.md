@@ -211,12 +211,18 @@ cashew/
 │   └── dev                      # Project session manager CLI
 ├── .claude/
 │   └── skills/
-│       ├── setup/
-│       │   └── SKILL.md         # /setup skill for bootstrapping
+│       └── setup/
+│           └── SKILL.md         # /setup skill for bootstrapping
+├── claude/
+│   ├── global/
+│   │   └── CLAUDE.md            # Global context for all Claude sessions
+│   ├── commands/
+│   │   └── dev.md               # /dev command
+│   └── skills/
 │       ├── prompting-worktree-agents/
 │       │   └── SKILL.md         # Socratic prompting loop for worktree agents
 │       └── repo-quality-rails-setup/
-│           └── SKILL.md         # Optional quality gates setup skill
+│           └── SKILL.md         # Optional quality rails setup skill
 ├── claude/
 │   ├── global/
 │   │   └── CLAUDE.md            # Global context for all Claude sessions
