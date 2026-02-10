@@ -47,7 +47,7 @@ Only review commits once the agent confirms it's done or asks for review.
 Periodically update Cashew so you have the latest skills/commands. Go to your Cashew repo and pull:
 
 ```bash
-cd <projects-dir>/cashew/main
+cd <cashew-root>
 git pull
 ```
 

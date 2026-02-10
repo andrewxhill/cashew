@@ -100,15 +100,15 @@ Append Cashew's global context block to the end of the user's `~/.claude/CLAUDE.
 ```bash
 mkdir -p ~/.claude/commands
 
-PROJECTS_DIR=~/<folder-name-from-step-1>
-CASHEW_BLOCK=~/<folder-name-from-step-1>/cashew/main/claude/global/CLAUDE.md
+CASHEW_ROOT=~/<folder-name-from-step-1>/cashew/main
+CASHEW_BLOCK=$CASHEW_ROOT/claude/global/CLAUDE.md
 TARGET=~/.claude/CLAUDE.md
 
 if ! grep -q "BEGIN CASHEW GLOBAL CONTEXT" "$TARGET" 2>/dev/null; then
   {
     echo ""
     echo "<!-- BEGIN CASHEW GLOBAL CONTEXT -->"
-    sed "s|<projects-dir>|$PROJECTS_DIR|g" "$CASHEW_BLOCK"
+    sed "s|<cashew-root>|$CASHEW_ROOT|g" "$CASHEW_BLOCK"
     echo "<!-- END CASHEW GLOBAL CONTEXT -->"
   } >> "$TARGET"
 fi
