@@ -47,11 +47,9 @@ Only review commits once the agent confirms it's done or asks for review.
 Periodically update Cashew so you have the latest skills/commands. Go to your Cashew repo and pull:
 
 ```bash
-cd <your-projects-dir>/cashew/main
+cd <projects-dir>/cashew/main
 git pull
 ```
-
-Common locations are `~/projects/cashew/main` or `~/Projects/cashew/main`.
 
 ## Worktree Workflow
 
