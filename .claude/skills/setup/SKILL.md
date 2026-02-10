@@ -103,7 +103,7 @@ mkdir -p ~/.claude/commands
 # Symlink global config and skills from the repo
 ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/global/CLAUDE.md ~/.claude/CLAUDE.md
 ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/dev.md ~/.claude/commands/dev.md
-ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/setup.md ~/.claude/commands/setup.md
+ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/setup ~/.claude/skills/setup
 ```
 
 ## Step 6: Install Pi Message Queue Extension
@@ -171,6 +171,6 @@ ssh -T git@github.com
 | cashew launcher | `/usr/local/bin/cashew` | tmux + fzf TUI launcher (symlink to repo) |
 | Global Claude config | `~/.claude/CLAUDE.md` | Workflow context for all sessions (symlink to repo) |
 | /dev skill | `~/.claude/commands/dev.md` | Full dev documentation (symlink to repo) |
-| /setup skill | `~/.claude/commands/setup.md` | This bootstrap skill (symlink to repo) |
+| /setup skill | `~/.claude/skills/setup/` | This bootstrap skill (symlink to repo) |
 | Pi message-queue | `pi list` (user package) | Enables `dev send-pi` to deliver messages to pi agents |
 | Projects folder | `~/<user-choice>` | Where all projects live |

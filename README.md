@@ -5,7 +5,7 @@ A dev-environment bootstrap that ships Claude skills/commands plus a `dev` sessi
 ## Example prompts (human → Claude)
 
 1. **Setup Cashew**
-   - “Use ./claude/commands/setup.md to set up my dev environment.”
+   - "Use /setup to set up my dev environment."
 
 2. **Create a worktree to fix a README**
    - “Clone `git@github.com:user/repo.git` and make a `fix-readme` worktree.”
@@ -135,7 +135,7 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    ```bash
    claude --dangerously-skip-permissions
    ```
-   Then say: “Use ./claude/commands/setup.md to set up my dev environment.”
+   Then say: "Use /setup to set up my dev environment."
 
    Claude will:
    - Ask for your projects folder name
@@ -209,12 +209,15 @@ If you want me to add screenshots, tell me which host and which terminal theme t
 cashew/
 ├── bin/
 │   └── dev                      # Project session manager CLI
+├── .claude/
+│   └── skills/
+│       └── setup/
+│           └── SKILL.md         # /setup skill for bootstrapping
 ├── claude/
 │   ├── global/
 │   │   └── CLAUDE.md            # Global context for all Claude sessions
 │   └── commands/
-│       ├── dev.md               # /dev skill
-│       └── setup.md             # /setup skill for bootstrapping
+│       └── dev.md               # /dev command
 └── pi/
     └── extensions/
         └── message-queue.ts     # Queue integration for Pi
