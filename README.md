@@ -144,13 +144,14 @@ This is a constraint of session naming, not a feature. If it breaks for you, cha
    - Install the `dev` command
    - Install Claude skills/commands
 
-3. **Optional: install Pi + queue extension**:
+3. **Optional: install Pi + queue/subscribe extensions**:
    ```bash
    npm install -g @mariozechner/pi-coding-agent
    mkdir -p ~/.pi/agent/extensions
    cp ~/Projects/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/
+   cp ~/Projects/cashew/main/pi/extensions/pi-subscribe.ts ~/.pi/agent/extensions/
    ```
-   This enables: `dev send`, `dev send-pi`, `dev pi-status`, `dev queue-status`.
+   This enables: `dev send`, `dev send-pi`, `dev pi-status`, `dev pi-subscribe`, `dev queue-status`.
 
 ## Cashew TUI (optional)
 

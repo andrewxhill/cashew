@@ -13,6 +13,8 @@ Use the `dev` command to manage tmux-backed project sessions in `~/projects/`.
 dev pi-status <session> --messages 1
 # optionally check pending queue
 dev queue-status <session> -m
+# if you need to wait for completion
+dev pi-subscribe <session> -f
 ```
 
 **Messaging rule:** Use `dev send-pi <session> <message>` to queue messages for worktree Pi agents. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
@@ -34,6 +36,7 @@ dev kill <session>               # Kill a specific session
 dev kill-all                     # Kill all sessions
 dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
+dev pi-subscribe <session> -f     # Follow final agent messages (done events)
 dev send <session> <keys>         # Send raw tmux keys (direct input)
 dev send-pi <session> <message>   # Queue a message for a Pi agent (preferred)
 dev reboot [--dry-run]            # Recreate baseline sessions after reboot
@@ -158,6 +161,7 @@ Quick version:
    ```bash
    dev pi-status <session> --messages 1
    dev queue-status <session> -m
+   dev pi-subscribe <session> -f
    ```
 2. Check for session requirements/notes if they were set:
    ```bash

@@ -1241,6 +1241,153 @@ pi_status() {
     fi
 }
 
+pi_subscribe() {
+    local input="$1"
+    shift
+
+    local messages_count=1
+    local follow=0
+    local show_full=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --messages|-m)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --messages"
+                    exit 1
+                fi
+                messages_count="$2"
+                shift 2
+                ;;
+            --follow|-f)
+                follow=1
+                shift
+                ;;
+            --full)
+                show_full=1
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev pi-subscribe <session> [options]"
+        echo ""
+        echo "Subscribe to final agent messages (agent_end events)."
+        echo ""
+        echo "Options:"
+        echo "  --messages, -m <n>  Show last n entries before following"
+        echo "  --follow, -f        Follow new entries (tail -f)"
+        echo "  --full              Show full message text"
+        exit 1
+    fi
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+    local target_dir=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+    else
+        target_dir="$repo_dir"
+    fi
+
+    if [ ! -d "$target_dir" ]; then
+        echo "Directory not found: $target_dir"
+        exit 1
+    fi
+
+    local safe_path
+    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+    local status_file="$HOME/.pi/status/${safe_path}.jsonl"
+
+    if [ ! -f "$status_file" ]; then
+        safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
+        status_file="$HOME/.pi/status/${safe_path}.jsonl"
+    fi
+
+    if [ ! -f "$status_file" ]; then
+        echo "No status file found for: $input"
+        echo "Expected: $status_file"
+        echo ""
+        echo "Make sure the pi-subscribe extension is loaded."
+        exit 1
+    fi
+
+    format_time() {
+        local ts_ms="$1"
+        if [ -z "$ts_ms" ] || [ "$ts_ms" = "null" ]; then
+            echo "unknown"
+            return
+        fi
+        if ! [[ "$ts_ms" =~ ^[0-9]+$ ]]; then
+            echo "unknown"
+            return
+        fi
+        local ts_s=$((ts_ms / 1000))
+        date -r "$ts_s" "+%Y-%m-%d %H:%M:%S"
+    }
+
+    render_line() {
+        local line="$1"
+        local ts_ms
+        local msg
+        local status
+        local stop_reason
+        local error_msg
+        ts_ms=$(echo "$line" | jq -r '.timestamp // 0' 2>/dev/null)
+        msg=$(echo "$line" | jq -r '.message // ""' 2>/dev/null)
+        status=$(echo "$line" | jq -r '.status // "done"' 2>/dev/null)
+        stop_reason=$(echo "$line" | jq -r '.stopReason // empty' 2>/dev/null)
+        error_msg=$(echo "$line" | jq -r '.errorMessage // empty' 2>/dev/null)
+
+        if [ -z "$msg" ]; then
+            msg="(no text)"
+        fi
+
+        if [ "$show_full" -ne 1 ]; then
+            msg=$(echo "$msg" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+            msg=$(echo "$msg" | cut -c1-240)
+        fi
+
+        local status_label="$status"
+        if [ -n "$stop_reason" ]; then
+            status_label="$status ($stop_reason)"
+        fi
+        if [ -n "$error_msg" ]; then
+            status_label="$status error: $error_msg"
+        fi
+
+        echo "  [$(format_time "$ts_ms")] $status_label: $msg"
+    }
+
+    local lines
+    lines=$(tail -n "$messages_count" "$status_file" 2>/dev/null || true)
+
+    if [ -n "$lines" ]; then
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            render_line "$line"
+        done <<< "$lines"
+    else
+        echo "(no status entries)"
+    fi
+
+    if [ "$follow" -eq 1 ]; then
+        echo -e "${DIM}(Ctrl+C to stop)${RESET}"
+        tail -n 0 -f "$status_file" | while read -r line; do
+            [ -z "$line" ] && continue
+            render_line "$line"
+        done
+    fi
+}
+
 queue_status() {
     local input="$1"
     shift
@@ -1473,6 +1620,9 @@ case "${1:-}" in
     "pi-status")
         pi_status "${@:2}"
         ;;
+    "pi-subscribe")
+        pi_subscribe "${@:2}"
+        ;;
     "queue-status")
         queue_status "${@:2}"
         ;;
@@ -1506,6 +1656,7 @@ case "${1:-}" in
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
+        echo "  dev pi-subscribe <session> [opts] Follow final agent messages"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
         echo "  dev review-loop               Print PM review loop checklist"
@@ -1524,6 +1675,7 @@ case "${1:-}" in
         echo "  dev cleanup myapp/feature-auth # remove worktree + branch + session"
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
+        echo "  dev pi-subscribe replay/main -f           # follow final messages"
         echo "  dev requirements replay/main/pi          # view session requirements"
         echo "  dev review-loop                          # print PM review loop"
         echo "  dev reboot --dry-run                     # show sessions to recreate"
@@ -1533,6 +1685,7 @@ case "${1:-}" in
         echo "Reminder: Read the last agent message before nudging:"
         echo "  dev pi-status <session> --messages 1"
         echo "  dev queue-status <session> -m"
+        echo "  dev pi-subscribe <session> -f"
         echo "  dev requirements <session>"
         echo ""
         echo "Session naming:"
