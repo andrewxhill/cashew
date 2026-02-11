@@ -189,7 +189,14 @@ dev send-pi <repo>/main/kw-<name> "Review this change for data-timeliness risks 
 dev pi-subscribe <repo>/main/kw-<name> -f
 ```
 
+**PM workflow (example):**
+1. PM drafts plan or change proposal.
+2. PM asks KW for design risks + QA lens.
+3. KW responds with constraints/tests/edge cases.
+4. PM adapts plan and sends guidance to worktree agent.
+
 **Role boundaries:**
+- Knowledge workers are on-demand advisors, not proactive monitors. They answer PM/agent questions.
 - No worktree creation/cleanup, no merges, no destructive dev commands.
 - Provide guidance, reviews, and plans. If asked to implement, answer with advice and a safe plan instead.
 
