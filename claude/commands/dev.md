@@ -31,7 +31,7 @@ dev <repo>/<worktree>            # Open specific worktree (for worktree-based re
 dev <repo>/<worktree>/<sub>      # Open sub-session (prefer /pi for worktrees)
 dev new <repo> <git-url>         # Clone repo with worktree structure
 dev wt <repo> <branch> [base]    # Add a new worktree for a branch
-dev cleanup <repo>/<worktree>    # Remove worktree + branch + session
+dev cleanup <repo>/<worktree>    # Remove worktree + branch + session (requires --force if unmerged)
 dev kill <session>               # Kill a specific session
 dev kill-all                     # Kill all sessions
 dev pi-status <session>          # Check agent status/last messages
@@ -134,6 +134,8 @@ Worktree branches are local by default. You do **not** need to push them to a re
    COMPOSE_PROJECT_NAME=<repo>-<feature-branch> docker compose down -v
 
    # 2. Remove worktree + branch + session
+   # Run without --force first. If warned about commits not in main,
+   # decide whether the branch was merged or should be discarded, then re-run with --force if needed.
    dev cleanup <repo>/<feature-branch>
    ```
 
@@ -174,7 +176,8 @@ Quick version:
 1. Always use sub-sessions for long-running processes (Claude, servers)
 2. Use `dev send-pi <session> <message>` when messaging worktree agents; it queues safely. Use `dev send` only for raw keystrokes.
 3. After reboot, run `dev reboot` to recreate baseline sessions (hub pi/claude, repo main pi/claude, feature worktree pi).
-4. The session persists even if you close SSH or terminal (until reboot)
-5. Use `dev` with no args to see all projects and active sessions
-6. Worktree repos let you work on multiple branches simultaneously
-7. Main Claude is your "project manager" - use it to orchestrate features
+4. `dev cleanup` now blocks if the branch has commits not in main; re-run with `--force` only after deciding it's safe to discard.
+5. The session persists even if you close SSH or terminal (until reboot)
+6. Use `dev` with no args to see all projects and active sessions
+7. Worktree repos let you work on multiple branches simultaneously
+8. Main Claude is your "project manager" - use it to orchestrate features

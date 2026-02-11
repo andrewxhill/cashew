@@ -420,14 +420,29 @@ cleanup_worktree() {
     shift
 
     local dry_run=0
-    if [ "${1:-}" = "--dry-run" ] || [ "${1:-}" = "-n" ]; then
-        dry_run=1
-    fi
+    local force=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run|-n)
+                dry_run=1
+                shift
+                ;;
+            --force|-f)
+                force=1
+                shift
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
 
     if [ -z "$input" ]; then
-        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run]"
+        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run] [--force]"
         echo ""
         echo "Kill the worktree session, remove the worktree, and delete the branch."
+        echo "Refuses to delete branches with commits not in main unless --force is set."
         exit 1
     fi
 
@@ -435,7 +450,7 @@ cleanup_worktree() {
     local repo="${parts[0]}"
     local worktree="${parts[1]:-}"
     if [ -z "$worktree" ]; then
-        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run]"
+        echo "Usage: dev cleanup <repo>/<worktree> [--dry-run] [--force]"
         exit 1
     fi
 
@@ -453,11 +468,24 @@ cleanup_worktree() {
 
     local session_name="${repo}${SEP}${worktree}"
 
+    local ahead_count=0
+    ahead_count=$(cd "$repo_dir" && git --git-dir=.bare rev-list --left-right --count "main...$worktree" 2>/dev/null | awk '{print $2}')
+    ahead_count=${ahead_count:-0}
+
     if [ "$dry_run" -eq 1 ]; then
         echo "Would kill sessions matching: $session_name*"
         echo "Would remove worktree: $wt_dir"
         echo "Would delete branch: $worktree"
+        if [ "$ahead_count" -gt 0 ]; then
+            echo "Would delete $worktree with $ahead_count commits not in main (--force required)."
+        fi
         return
+    fi
+
+    if [ "$ahead_count" -gt 0 ] && [ "$force" -ne 1 ]; then
+        echo "Refusing to delete $worktree: $ahead_count commits not in main."
+        echo "Use --force to delete anyway."
+        exit 1
     fi
 
     # Kill base session and all sub-sessions (e.g., repo_wt_pi, repo_wt_claude)
@@ -1650,7 +1678,7 @@ case "${1:-}" in
         echo "  dev <repo>/<worktree>/<sub>   Attach to sub-session (prefer /pi for worktrees)"
         echo "  dev new <repo> <git-url>      Clone as worktree-based repo"
         echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
-        echo "  dev cleanup <repo>/<worktree> Remove worktree + branch + session"
+        echo "  dev cleanup <repo>/<worktree> Remove worktree + branch + session (use --force if unmerged)"
         echo "  dev kill <session>            Kill a session"
         echo "  dev kill-all                  Kill all sessions"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
