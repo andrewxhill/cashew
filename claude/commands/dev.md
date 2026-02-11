@@ -34,12 +34,16 @@ dev wt <repo> <branch> [base]    # Add a new worktree for a branch
 dev cleanup <repo>/<worktree>    # Remove worktree + branch + session (requires --force if unmerged)
 dev kill <session>               # Kill a specific session
 dev kill-all                     # Kill all sessions
+dev kw <repo> <name>             # Start a knowledge-worker session
+dev kw-list [repo]               # List knowledge workers
+dev kw-tags <repo>/<name> <tags> # Set knowledge-worker tags
+dev kw-note <repo>/<name> <note> # Set knowledge-worker note
 dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
-dev pi-subscribe <session> -f     # Follow final agent messages (done events)
-dev send <session> <keys>         # Send raw tmux keys (direct input)
-dev send-pi <session> <message>   # Queue a message for a Pi agent (preferred)
-dev reboot [--dry-run]            # Recreate baseline sessions after reboot
+dev pi-subscribe <session> -f    # Follow final agent messages (done events)
+dev send <session> <keys>        # Send raw tmux keys (direct input)
+dev send-pi <session> <message>  # Queue a message for a Pi agent (preferred)
+dev reboot [--dry-run]           # Recreate baseline sessions after reboot
 ```
 
 ## Project Structure
@@ -70,6 +74,7 @@ dev reboot [--dry-run]            # Recreate baseline sessions after reboot
 | `dev myapp/main` | `myapp_main` | Worktree main session |
 | `dev myapp/main/pi` | `myapp_main_pi` | Preferred Pi sub-session (worktrees) |
 | `dev myapp/main/claude` | `myapp_main_claude` | Claude sub-session |
+| `dev myapp/main/kw-arch` | `myapp_main_kw-arch` | Knowledge-worker session |
 
 Common sub-session names:
 - `pi` - Preferred worktree agent session
@@ -144,6 +149,43 @@ Worktree branches are local by default. You do **not** need to push them to a re
 - **Main Claude** handles integration and project management
 - Avoids Claude deleting its own worktree mid-session
 - Clean separation of concerns
+
+## Knowledge Workers (long-running domain agents)
+Knowledge workers are persistent Pi sessions anchored on `main` that focus on design, review, risk analysis, and planning.
+They are **not** PM or worktree implementation agents.
+(Requires the `kw-role` extension for role reminders and `/kw-*` commands.)
+
+**Start one:**
+```bash
+dev kw <repo> <name> --tags "arch,api" --bootstrap "Review auth architecture and keep a running design guide."
+```
+
+**List them:**
+```bash
+dev kw-list <repo>
+```
+
+**Update metadata (from shell):**
+```bash
+dev kw-tags <repo>/<name> "arch,api"
+dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
+```
+
+**Update metadata (inside the kw session):**
+```
+/kw-tags arch,api
+/kw-note Owns auth architecture and cross-service contracts
+```
+
+**Message + wait:**
+```bash
+dev send-pi <repo>/main/kw-<name> "Review the plan and call out risks"
+dev pi-subscribe <repo>/main/kw-<name> -f
+```
+
+**Role boundaries:**
+- No worktree creation/cleanup, no merges, no destructive dev commands.
+- Provide guidance, reviews, and plans. If asked to implement, answer with advice and a safe plan instead.
 
 ## Reviewing a worktree agent (do this before merging)
 

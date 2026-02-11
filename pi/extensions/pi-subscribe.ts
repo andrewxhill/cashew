@@ -23,6 +23,8 @@ export default function (pi: ExtensionAPI) {
   }
 
   function getStatusFile(cwd: string): string {
+    const override = process.env.PI_STATUS_FILE;
+    if (override) return override;
     const safePath = safePathFromCwd(cwd);
     return `${process.env.HOME}/.pi/status/${safePath}.jsonl`;
   }

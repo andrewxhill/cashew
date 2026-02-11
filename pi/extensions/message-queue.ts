@@ -22,6 +22,8 @@ export default function (pi: ExtensionAPI) {
 
   // Convert cwd to queue file path (same format as session dirs - lowercase)
   function getQueueFile(cwd: string): string {
+    const override = process.env.PI_QUEUE_FILE;
+    if (override) return override;
     const safePath = cwd.toLowerCase().replace(/\//g, "-").replace(/^-/, "");
     return `${process.env.HOME}/.pi/queues/${safePath}.jsonl`;
   }

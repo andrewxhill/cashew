@@ -45,6 +45,127 @@ to_display_name() {
     echo "$1" | sed "s|${SEP}|/|g"
 }
 
+KW_META_DIR="$HOME/.pi/kw"
+
+kw_safe() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's|[^a-z0-9._-]|-|g'
+}
+
+kw_meta_file() {
+    local repo="$1"
+    local name="$2"
+    echo "$KW_META_DIR/$(kw_safe "$repo")__$(kw_safe "$name").json"
+}
+
+kw_meta_get() {
+    local repo="$1"
+    local name="$2"
+    local field="$3"
+    local file
+    file=$(kw_meta_file "$repo" "$name")
+    if [ ! -f "$file" ]; then
+        echo ""
+        return
+    fi
+    jq -r ".${field} // empty" "$file" 2>/dev/null
+}
+
+kw_tags_json() {
+    local tags_csv="$1"
+    local cleaned
+    cleaned=$(echo "$tags_csv" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | sed '/^$/d')
+    if [ -z "$cleaned" ]; then
+        echo "[]"
+        return
+    fi
+    echo "$cleaned" | jq -R . | jq -s '.'
+}
+
+kw_write_meta() {
+    local repo="$1"
+    local name="$2"
+    local tags_csv="$3"
+    local description="$4"
+    local session_dir="$5"
+    local queue_file="$6"
+    local status_file="$7"
+    local session_path="$8"
+
+    local file
+    file=$(kw_meta_file "$repo" "$name")
+    mkdir -p "$KW_META_DIR"
+
+    local created_at
+    local updated_at
+    created_at=$(kw_meta_get "$repo" "$name" "createdAt")
+    if [ -z "$created_at" ]; then
+        created_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    fi
+    updated_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    if [ -z "$description" ]; then
+        description=$(kw_meta_get "$repo" "$name" "description")
+    fi
+    if [ -z "$session_dir" ]; then
+        session_dir=$(kw_meta_get "$repo" "$name" "sessionDir")
+    fi
+    if [ -z "$queue_file" ]; then
+        queue_file=$(kw_meta_get "$repo" "$name" "queueFile")
+    fi
+    if [ -z "$status_file" ]; then
+        status_file=$(kw_meta_get "$repo" "$name" "statusFile")
+    fi
+    if [ -z "$session_path" ]; then
+        session_path=$(kw_meta_get "$repo" "$name" "sessionPath")
+    fi
+
+    local tags_json
+    if [ -n "$tags_csv" ]; then
+        tags_json=$(kw_tags_json "$tags_csv")
+    else
+        tags_json=$(jq -c '.tags // []' "$file" 2>/dev/null || echo "[]")
+    fi
+
+    jq -n \
+        --arg repo "$repo" \
+        --arg name "$name" \
+        --arg description "$description" \
+        --arg createdAt "$created_at" \
+        --arg updatedAt "$updated_at" \
+        --arg sessionDir "$session_dir" \
+        --arg queueFile "$queue_file" \
+        --arg statusFile "$status_file" \
+        --arg sessionPath "$session_path" \
+        --arg role "knowledge-worker" \
+        --argjson tags "$tags_json" \
+        '{repo: $repo, name: $name, role: $role, tags: $tags, description: $description, createdAt: $createdAt, updatedAt: $updatedAt, sessionDir: $sessionDir, queueFile: $queueFile, statusFile: $statusFile, sessionPath: $sessionPath}' \
+        > "$file"
+}
+
+kw_queue_file() {
+    local repo="$1"
+    local name="$2"
+    local safe_id
+    safe_id="$(kw_safe "$repo")__$(kw_safe "$name")"
+    echo "$HOME/.pi/queues/kw-${safe_id}.jsonl"
+}
+
+kw_status_file() {
+    local repo="$1"
+    local name="$2"
+    local safe_id
+    safe_id="$(kw_safe "$repo")__$(kw_safe "$name")"
+    echo "$HOME/.pi/status/kw-${safe_id}.jsonl"
+}
+
+kw_session_dir() {
+    local repo="$1"
+    local name="$2"
+    local safe_id
+    safe_id="$(kw_safe "$repo")__$(kw_safe "$name")"
+    echo "$HOME/.pi/agent/kw-sessions/kw-${safe_id}"
+}
+
 get_tmux_sessions() {
     if ! command -v tmux >/dev/null 2>&1; then
         return 0
@@ -397,6 +518,235 @@ add_worktree() {
     echo "  dev $repo/$branch/claude     # claude sub-session"
 }
 
+kw_list() {
+    local repo_filter="${1:-}"
+
+    if [ ! -d "$KW_META_DIR" ]; then
+        echo "No knowledge workers found."
+        return
+    fi
+
+    local found=0
+    for file in "$KW_META_DIR"/*.json; do
+        [ -f "$file" ] || continue
+        local repo
+        local name
+        local tags
+        local description
+        local updated
+        local session_path
+        repo=$(jq -r '.repo // ""' "$file" 2>/dev/null)
+        if [ -n "$repo_filter" ] && [ "$repo_filter" != "$repo" ]; then
+            continue
+        fi
+        name=$(jq -r '.name // ""' "$file" 2>/dev/null)
+        tags=$(jq -r '.tags // [] | join(",")' "$file" 2>/dev/null)
+        description=$(jq -r '.description // ""' "$file" 2>/dev/null)
+        updated=$(jq -r '.updatedAt // ""' "$file" 2>/dev/null)
+        session_path=$(jq -r '.sessionPath // empty' "$file" 2>/dev/null)
+
+        if [ -z "$repo" ] || [ -z "$name" ]; then
+            continue
+        fi
+
+        found=1
+        if [ -n "$description" ]; then
+            description=$(echo "$description" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+        fi
+        if [ -z "$session_path" ]; then
+            session_path="${repo}/kw-${name}"
+        fi
+        echo "- ${session_path}  tags: ${tags:-none}  updated: ${updated:-unknown}"
+        if [ -n "$description" ]; then
+            echo "  note: $description"
+        fi
+    done
+
+    if [ "$found" -eq 0 ]; then
+        echo "No knowledge workers found."
+    fi
+}
+
+kw_tag() {
+    local input="$1"
+    shift
+
+    if [ -z "$input" ] || [ $# -eq 0 ]; then
+        echo "Usage: dev kw-tags <repo>/<name> <tags>"
+        echo ""
+        echo "Set tags for a knowledge worker (comma-separated)."
+        exit 1
+    fi
+
+    local tags_csv="$*"
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local name="${parts[1]:-}"
+    if [ -z "$repo" ] || [ -z "$name" ]; then
+        echo "Usage: dev kw-tags <repo>/<name> <tags>"
+        exit 1
+    fi
+
+    kw_write_meta "$repo" "$name" "$tags_csv" "" "" "" "" ""
+    echo "Updated tags for $repo/kw-$name"
+}
+
+kw_note() {
+    local input="$1"
+    shift
+
+    if [ -z "$input" ] || [ $# -eq 0 ]; then
+        echo "Usage: dev kw-note <repo>/<name> <note>"
+        echo ""
+        echo "Set description/note for a knowledge worker."
+        exit 1
+    fi
+
+    local note="$*"
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local name="${parts[1]:-}"
+    if [ -z "$repo" ] || [ -z "$name" ]; then
+        echo "Usage: dev kw-note <repo>/<name> <note>"
+        exit 1
+    fi
+
+    kw_write_meta "$repo" "$name" "" "$note" "" "" "" ""
+    echo "Updated note for $repo/kw-$name"
+}
+
+kw_session() {
+    local repo="$1"
+    local name="$2"
+    shift 2
+
+    local tags=""
+    local description=""
+    local bootstrap=""
+    local bootstrap_file=""
+    local attach=0
+    local worktree="main"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tags)
+                tags="${2:-}"
+                shift 2
+                ;;
+            --description|--desc)
+                description="${2:-}"
+                shift 2
+                ;;
+            --bootstrap|-b)
+                bootstrap="${2:-}"
+                shift 2
+                ;;
+            --bootstrap-file)
+                bootstrap_file="${2:-}"
+                shift 2
+                ;;
+            --worktree|-w)
+                worktree="${2:-main}"
+                shift 2
+                ;;
+            --attach|-a)
+                attach=1
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$repo" ] || [ -z "$name" ]; then
+        echo "Usage: dev kw <repo> <name> [--tags <tags>] [--description <text>] [--bootstrap <text>] [--bootstrap-file <file>] [--worktree <name>] [--attach]"
+        exit 1
+    fi
+
+    local repo_dir="$PROJECTS_DIR/$repo"
+    if [ ! -d "$repo_dir" ]; then
+        echo "Repo not found: $repo"
+        exit 1
+    fi
+
+    local target_dir=""
+    local session_name=""
+    local session_path=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+        if [ ! -d "$target_dir" ]; then
+            echo "Worktree not found: $target_dir"
+            exit 1
+        fi
+        session_name="${repo}${SEP}${worktree}${SEP}kw-${name}"
+        session_path="$repo/$worktree/kw-${name}"
+    else
+        target_dir="$repo_dir"
+        session_name="${repo}${SEP}kw-${name}"
+        session_path="$repo/kw-${name}"
+    fi
+
+    local queue_file
+    local status_file
+    local session_dir
+    queue_file=$(kw_queue_file "$repo" "$name")
+    status_file=$(kw_status_file "$repo" "$name")
+    session_dir=$(kw_session_dir "$repo" "$name")
+
+    mkdir -p "$(dirname "$queue_file")" "$(dirname "$status_file")" "$session_dir"
+
+    kw_write_meta "$repo" "$name" "$tags" "$description" "$session_dir" "$queue_file" "$status_file" "$session_path"
+
+    if [ -z "$tags" ]; then
+        tags=$(jq -r '.tags // [] | join(",")' "$(kw_meta_file "$repo" "$name")" 2>/dev/null)
+    fi
+
+    local backend
+    backend=$(session_backend "$session_name")
+    if [ "$backend" = "tmux" ]; then
+        if [ "$attach" -eq 1 ]; then
+            tmux attach -t "$session_name"
+        else
+            echo "Knowledge worker already running: $(to_display_name "$session_name")"
+        fi
+        return
+    fi
+
+    tmux new-session -d -s "$session_name" -c "$target_dir"
+
+    local cmd_line
+    local meta_file
+    meta_file=$(kw_meta_file "$repo" "$name")
+    printf -v cmd_line 'PI_ROLE=knowledge-worker PI_KW_ROLE=1 PI_KW_REPO=%q PI_KW_NAME=%q PI_KW_TAGS=%q PI_QUEUE_FILE=%q PI_STATUS_FILE=%q PI_KW_META_FILE=%q pi --session-dir %q' \
+        "$repo" "$name" "$tags" "$queue_file" "$status_file" "$meta_file" "$session_dir"
+    tmux send-keys -t "$session_name" "$cmd_line" C-m
+
+    if [ -n "$bootstrap_file" ]; then
+        if [ ! -f "$bootstrap_file" ]; then
+            echo "Bootstrap file not found: $bootstrap_file"
+        else
+            bootstrap=$(cat "$bootstrap_file")
+        fi
+    fi
+
+    if [ -z "$bootstrap" ]; then
+        bootstrap=$'You are a knowledge-worker agent.\nSet your tags with /kw-tags tag1,tag2 and a short note with /kw-note.\nConfirm your domain focus and any key references for the PM.'
+    fi
+
+    if [ -n "$bootstrap" ]; then
+        send_pi "$session_path" "$bootstrap"
+    fi
+
+    echo -e "${GREEN}Knowledge worker started!${RESET}"
+    echo -e "  session: ${CYAN}dev ${session_path}${RESET}"
+    echo -e "  queue: ${DIM}${queue_file}${RESET}"
+}
+
 kill_session() {
     local input="$1"
     # Convert path-style to session name
@@ -622,6 +972,30 @@ send_pi() {
     if [ ! -d "$target_dir" ]; then
         echo "Directory not found: $target_dir"
         exit 1
+    fi
+
+    if [[ "$sub" == kw-* ]]; then
+        local kw_name
+        local queue_file
+        kw_name="${sub#kw-}"
+        queue_file=$(kw_meta_get "$repo" "$kw_name" "queueFile")
+        if [ -z "$queue_file" ]; then
+            queue_file=$(kw_queue_file "$repo" "$kw_name")
+        fi
+        mkdir -p "$(dirname "$queue_file")"
+
+        local json_line
+        json_line=$(jq -nc --arg message "$message" --arg mode "$mode" '{message: $message, mode: $mode}')
+        if ! echo "$json_line" | jq -e . >/dev/null 2>&1; then
+            echo "ERROR: message contains characters that break JSON encoding" >&2
+            exit 1
+        fi
+        echo "$json_line" >> "$queue_file"
+
+        local display_name
+        display_name=$(to_display_name "$(to_session_name "$input")")
+        echo -e "Queued for ${GREEN}${display_name}${RESET} (${mode}): $message"
+        return
     fi
 
     if [ -n "$sub" ]; then
@@ -983,11 +1357,14 @@ pi_status() {
     local worktree="${parts[1]:-main}"
     local repo_dir="$PROJECTS_DIR/$repo"
     local target_dir=""
+    local sub=""
 
     if [ -d "$repo_dir/.bare" ]; then
         target_dir="$repo_dir/$worktree"
+        sub="${parts[2]:-}"
     else
         target_dir="$repo_dir"
+        sub="${parts[1]:-}"
     fi
 
     if [ ! -d "$target_dir" ]; then
@@ -995,13 +1372,23 @@ pi_status() {
         exit 1
     fi
 
-    local safe_path
-    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
-    local session_dir="$HOME/.pi/agent/sessions/--${safe_path}--"
-
-    if [ ! -d "$session_dir" ]; then
-        safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
+    local session_dir=""
+    if [[ "$sub" == kw-* ]]; then
+        local kw_name
+        kw_name="${sub#kw-}"
+        session_dir=$(kw_meta_get "$repo" "$kw_name" "sessionDir")
+        if [ -z "$session_dir" ]; then
+            session_dir=$(kw_session_dir "$repo" "$kw_name")
+        fi
+    else
+        local safe_path
+        safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
         session_dir="$HOME/.pi/agent/sessions/--${safe_path}--"
+
+        if [ ! -d "$session_dir" ]; then
+            safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
+            session_dir="$HOME/.pi/agent/sessions/--${safe_path}--"
+        fi
     fi
 
     if [ ! -d "$session_dir" ]; then
@@ -1319,11 +1706,14 @@ pi_subscribe() {
     local worktree="${parts[1]:-main}"
     local repo_dir="$PROJECTS_DIR/$repo"
     local target_dir=""
+    local sub=""
 
     if [ -d "$repo_dir/.bare" ]; then
         target_dir="$repo_dir/$worktree"
+        sub="${parts[2]:-}"
     else
         target_dir="$repo_dir"
+        sub="${parts[1]:-}"
     fi
 
     if [ ! -d "$target_dir" ]; then
@@ -1331,13 +1721,34 @@ pi_subscribe() {
         exit 1
     fi
 
-    local safe_path
-    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
-    local status_file="$HOME/.pi/status/${safe_path}.jsonl"
+    local status_file=""
+    if [[ "$sub" == kw-* ]]; then
+        local kw_name
+        kw_name="${sub#kw-}"
+        status_file=$(kw_meta_get "$repo" "$kw_name" "statusFile")
+        if [ -z "$status_file" ]; then
+            status_file=$(kw_status_file "$repo" "$kw_name")
+        fi
+    else
+        local safe_path
+        safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+        status_file="$HOME/.pi/status/${safe_path}.jsonl"
+
+        if [ ! -f "$status_file" ]; then
+            safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
+            status_file="$HOME/.pi/status/${safe_path}.jsonl"
+        fi
+    fi
 
     if [ ! -f "$status_file" ]; then
-        safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
-        status_file="$HOME/.pi/status/${safe_path}.jsonl"
+        if [ "$follow" -eq 1 ]; then
+            local waited=0
+            local timeout=10
+            while [ ! -f "$status_file" ] && [ "$waited" -lt "$timeout" ]; do
+                sleep 1
+                waited=$((waited + 1))
+            done
+        fi
     fi
 
     if [ ! -f "$status_file" ]; then
@@ -1489,32 +1900,45 @@ queue_status() {
         exit 1
     fi
 
-    if [ -n "$sub" ]; then
-        local sub_dir="$target_dir/$sub"
-        local dot_sub_dir="$target_dir/.${sub}"
-        local chosen=""
+    local queue_file=""
+    local dead_file=""
 
-        for candidate in "$sub_dir" "$dot_sub_dir"; do
-            if [ -d "$candidate" ]; then
-                local safe_candidate
-                safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
-                local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
-                if [ -d "$session_candidate" ]; then
-                    chosen="$candidate"
-                    break
-                fi
-            fi
-        done
-
-        if [ -n "$chosen" ]; then
-            target_dir="$chosen"
+    if [[ "$sub" == kw-* ]]; then
+        local kw_name
+        kw_name="${sub#kw-}"
+        queue_file=$(kw_meta_get "$repo" "$kw_name" "queueFile")
+        if [ -z "$queue_file" ]; then
+            queue_file=$(kw_queue_file "$repo" "$kw_name")
         fi
-    fi
+        dead_file="$queue_file.dead-letter"
+    else
+        if [ -n "$sub" ]; then
+            local sub_dir="$target_dir/$sub"
+            local dot_sub_dir="$target_dir/.${sub}"
+            local chosen=""
 
-    local safe_path
-    safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
-    local queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
-    local dead_file="$queue_file.dead-letter"
+            for candidate in "$sub_dir" "$dot_sub_dir"; do
+                if [ -d "$candidate" ]; then
+                    local safe_candidate
+                    safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+                    local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
+                    if [ -d "$session_candidate" ]; then
+                        chosen="$candidate"
+                        break
+                    fi
+                fi
+            done
+
+            if [ -n "$chosen" ]; then
+                target_dir="$chosen"
+            fi
+        fi
+
+        local safe_path
+        safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+        queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+        dead_file="$queue_file.dead-letter"
+    fi
 
     if [ "$clear_queue" -eq 1 ]; then
         : > "$queue_file"
@@ -1645,6 +2069,18 @@ case "${1:-}" in
     "send-pi")
         send_pi "$2" "${@:3}"
         ;;
+    "kw")
+        kw_session "$2" "$3" "${@:4}"
+        ;;
+    "kw-list")
+        kw_list "$2"
+        ;;
+    "kw-tags")
+        kw_tag "$2" "${@:3}"
+        ;;
+    "kw-note")
+        kw_note "$2" "${@:3}"
+        ;;
     "pi-status")
         pi_status "${@:2}"
         ;;
@@ -1679,6 +2115,10 @@ case "${1:-}" in
         echo "  dev new <repo> <git-url>      Clone as worktree-based repo"
         echo "  dev wt <repo> <branch> [base] Add a worktree for branch"
         echo "  dev cleanup <repo>/<worktree> Remove worktree + branch + session (use --force if unmerged)"
+        echo "  dev kw <repo> <name>          Start knowledge-worker session"
+        echo "  dev kw-list [repo]            List knowledge workers"
+        echo "  dev kw-tags <repo>/<name> <tags>  Set knowledge-worker tags"
+        echo "  dev kw-note <repo>/<name> <note>  Set knowledge-worker note"
         echo "  dev kill <session>            Kill a session"
         echo "  dev kill-all                  Kill all sessions"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
@@ -1704,6 +2144,8 @@ case "${1:-}" in
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
         echo "  dev pi-subscribe replay/main -f           # follow final messages"
+        echo "  dev kw replay arch --tags risk,api        # start knowledge worker"
+        echo "  dev kw-list replay                        # list knowledge workers"
         echo "  dev requirements replay/main/pi          # view session requirements"
         echo "  dev review-loop                          # print PM review loop"
         echo "  dev reboot --dry-run                     # show sessions to recreate"
