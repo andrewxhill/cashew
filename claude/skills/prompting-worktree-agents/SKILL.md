@@ -10,19 +10,20 @@ Guide each worktree agent through a short Socratic loop so they articulate impac
 - You need deeper reasoning or risk analysis before code changes.
 
 ## Procedure (per issue/agent)
-1. **Ask the 3-part Socratic prompt** (single message):
+1. **Send three separate Socratic prompts (one at a time).** Do **not** send them as a single combined message.
    - **Theoretical:** “What makes a fix for this kind of issue effective in production (impact, risk, measurability)?”
    - **Framework:** “What principles/constraints apply here (data integrity, trading risk, latency, rollback, tests)?”
    - **Application:** “Now apply those to this issue: root-cause hypothesis, edge cases, acceptance criteria, and a safe implementation plan.”
 
-2. **Wait for the agent’s response** before any implementation guidance.
-   - Use the **dev command skill** to wait and read their response:
-     ```bash
-     dev pi-status <repo>/<worktree> --messages 1
-     ```
+2. **Wait after each prompt.** Use the **dev command skill** to read their response before sending the next question:
+   ```bash
+   dev pi-status <repo>/<worktree> --messages 1
+   ```
+   Acknowledge briefly (1–2 sentences), then send the next question.
 
-3. **Summarize their answers back to them**, then instruct them to proceed with implementation.
+3. **After the third answer**, summarize their responses back to them and only then instruct them to proceed with implementation.
 
-## Notes
-- Do **not** proceed until the agent responds.
-- If the response is shallow, ask one follow-up Socratic question before proceeding.
+## Best Practices
+- **Follow-up vs steer:** use `dev send-pi <session> "..."` (follow-up/queued) for non-urgent guidance; use `dev send-pi <session> --enter "..."` (steer) only to interrupt unsafe or off-track work.
+- **Check before nudging:** always read the last message with `dev pi-status <session> --messages 1` before sending anything.
+- **If responses are shallow:** ask one additional Socratic question, then proceed.
