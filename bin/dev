@@ -735,7 +735,7 @@ kw_session() {
     fi
 
     if [ -z "$bootstrap" ]; then
-        bootstrap=$'You are a knowledge-worker agent.\nFirst, familiarize yourself: read AGENTS.md and README.md, then skim docs/plans relevant to your domain and locate key packages/apps.\nSummarize your understanding and create a short guide for the PM (constraints, pitfalls, QA checks).\nSet your tags with /kw-tags tag1,tag2 and a short note with /kw-note.'
+        bootstrap=$'You are a knowledge-worker agent.\nFirst, familiarize yourself: read AGENTS.md and README.md, then skim docs/plans relevant to your domain and locate key packages/apps.\nSummarize your understanding and create a short guide for the PM (constraints, pitfalls, QA checks).\nRun /kw-tags tag1,tag2 and /kw-note inside your session (not in a response).'
     fi
 
     if [ -n "$bootstrap" ]; then

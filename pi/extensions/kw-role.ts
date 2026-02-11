@@ -44,15 +44,19 @@ export default function (pi: ExtensionAPI) {
 
   const name = process.env.PI_KW_NAME || "";
   const repo = process.env.PI_KW_REPO || "";
-  const tags = parseTags(process.env.PI_KW_TAGS);
   const metaFile = process.env.PI_KW_META_FILE || "";
+  let currentTags = parseTags(process.env.PI_KW_TAGS);
+  let currentDescription = "";
+
+  function updateStatus(ctx: { hasUI: boolean; ui: any }) {
+    if (!ctx.hasUI) return;
+    const label = ["KW", name || "unknown"].filter(Boolean).join(": ");
+    const tagsText = currentTags.length > 0 ? `(${currentTags.join(", ")})` : "";
+    ctx.ui.setStatus("kw-role", `${label} ${tagsText}`.trim());
+  }
 
   pi.on("session_start", async (_event, ctx) => {
-    if (ctx.hasUI) {
-      const label = ["KW", name || "unknown"].filter(Boolean).join(": ");
-      const tagsText = tags.length > 0 ? `(${tags.join(", ")})` : "";
-      ctx.ui.setStatus("kw-role", `${label} ${tagsText}`.trim());
-    }
+    updateStatus(ctx);
   });
 
   pi.on("before_agent_start", async (event) => {
@@ -62,6 +66,7 @@ export default function (pi: ExtensionAPI) {
       "You are NOT a worktree implementation agent and NOT the PM.",
       "Do not create/cleanup worktrees, do not merge branches, and do not run destructive dev commands.",
       "If asked to implement, respond with guidance and propose a plan or review instead.",
+      "To update tags or notes, run /kw-tags and /kw-note in your own session (not in a response).",
     ].join(" ");
 
     return { systemPrompt: `${event.systemPrompt}\n\n${roleNote}` };
@@ -70,27 +75,81 @@ export default function (pi: ExtensionAPI) {
   if (metaFile) {
     pi.registerCommand("kw-tags", {
       description: "Set knowledge-worker tags (comma-separated)",
-      handler: async (args) => {
+      handler: async (args, ctx) => {
         const tagList = parseTags(args);
+        currentTags = tagList;
         updateMeta(metaFile, (current) => ({
           ...current,
           tags: tagList,
           updatedAt: new Date().toISOString(),
         }));
+        updateStatus(ctx);
       },
     });
 
     pi.registerCommand("kw-note", {
       description: "Set knowledge-worker description/note",
-      handler: async (args) => {
+      handler: async (args, ctx) => {
+        currentDescription = args || currentDescription;
         updateMeta(metaFile, (current) => ({
           ...current,
           description: args || current.description || "",
           updatedAt: new Date().toISOString(),
         }));
+        updateStatus(ctx);
       },
     });
   }
+
+  function extractText(content: any): string {
+    if (!content) return "";
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((part) => part && part.type === "text")
+        .map((part) => part.text || "")
+        .join(" ")
+        .trim();
+    }
+    return "";
+  }
+
+  function applyInlineMeta(text: string, ctx: { hasUI: boolean; ui: any }) {
+    if (!metaFile || !text) return;
+
+    const tagMatch = text.match(/^\s*\/kw-tags\s+(.+)$/m);
+    const noteMatch = text.match(/^\s*\/kw-note\s+(.+)$/m);
+
+    if (tagMatch) {
+      const tagList = parseTags(tagMatch[1]);
+      currentTags = tagList;
+      updateMeta(metaFile, (current) => ({
+        ...current,
+        tags: tagList,
+        updatedAt: new Date().toISOString(),
+      }));
+      updateStatus(ctx);
+    }
+
+    if (noteMatch) {
+      const noteText = noteMatch[1].trim();
+      currentDescription = noteText || currentDescription;
+      updateMeta(metaFile, (current) => ({
+        ...current,
+        description: noteText || current.description || "",
+        updatedAt: new Date().toISOString(),
+      }));
+    }
+  }
+
+  pi.on("agent_end", async (event, ctx) => {
+    if (!metaFile) return;
+    const messages = event.messages ?? [];
+    const lastAssistant = [...messages].reverse().find((message: any) => message?.role === "assistant");
+    if (!lastAssistant) return;
+    const text = extractText(lastAssistant.content);
+    applyInlineMeta(text, ctx);
+  });
 
   pi.registerCommand("kw-info", {
     description: "Show knowledge-worker role info",
@@ -99,7 +158,7 @@ export default function (pi: ExtensionAPI) {
         `role: knowledge-worker`,
         `repo: ${repo || "(unknown)"}`,
         `name: ${name || "(unknown)"}`,
-        `tags: ${tags.length > 0 ? tags.join(", ") : "(none)"}`,
+        `tags: ${currentTags.length > 0 ? currentTags.join(", ") : "(none)"}`,
       ];
       if (ctx.hasUI) {
         ctx.ui.notify(info.join(" | "), "info");

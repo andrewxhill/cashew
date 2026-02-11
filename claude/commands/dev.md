@@ -178,6 +178,7 @@ dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
 /kw-tags arch,api
 /kw-note Owns auth architecture and cross-service contracts
 ```
+(If a KW includes `/kw-tags` or `/kw-note` in a response, the kw-role extension will apply it automatically.)
 
 **Message + wait (PM usage examples):**
 ```bash
