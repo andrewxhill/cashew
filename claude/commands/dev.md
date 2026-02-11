@@ -155,8 +155,10 @@ Knowledge workers are persistent Pi sessions anchored on `main` that focus on de
 They are **not** PM or worktree implementation agents.
 (Requires the `kw-role` extension for role reminders and `/kw-*` commands.)
 
-**Start one:**
+**Start one (uses default bootstrap if omitted):**
 ```bash
+dev kw <repo> <name> --tags "arch,api"
+# or override with a custom bootstrap
 dev kw <repo> <name> --tags "arch,api" --bootstrap "Review auth architecture and keep a running design guide."
 ```
 
@@ -177,9 +179,13 @@ dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
 /kw-note Owns auth architecture and cross-service contracts
 ```
 
-**Message + wait:**
+**Message + wait (PM usage examples):**
 ```bash
-dev send-pi <repo>/main/kw-<name> "Review the plan and call out risks"
+# Ask for design guidance
+dev send-pi <repo>/main/kw-<name> "Given this plan, where are the architecture risks and what constraints must we respect?"
+# Ask for QA lens
+dev send-pi <repo>/main/kw-<name> "Review this change for data-timeliness risks and missing checks."
+# Wait for completion
 dev pi-subscribe <repo>/main/kw-<name> -f
 ```
 
