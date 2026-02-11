@@ -123,17 +123,19 @@ ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/skills/prompting-worktree-
 ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/skills/repo-quality-rails-setup ~/.claude/skills/repo-quality-rails-setup
 ```
 
-## Step 6: Install Pi Message Queue Extension
+## Step 6: Install Pi Queue/Subscribe/Knowledge-Worker Extensions
 
-The message-queue extension lets `dev send-pi` deliver messages to running pi agents. Install it globally so it loads in every pi session:
+Install the extensions globally so they load in every pi session:
 
 ```bash
 # Requires pi to be installed: npm install -g @mariozechner/pi-coding-agent
-pi install ~/<folder-name-from-step-1>/cashew/main/pi/extensions/message-queue.ts
+mkdir -p ~/.pi/agent/extensions
+ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/message-queue.ts
+ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/pi-subscribe.ts ~/.pi/agent/extensions/pi-subscribe.ts
+ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/kw-role.ts ~/.pi/agent/extensions/kw-role.ts
 
 # Verify
-pi list
-# Should show: message-queue.ts under "User packages"
+ls -l ~/.pi/agent/extensions
 ```
 
 ## Step 7: Configure Git for SSH (if needed)
@@ -176,7 +178,7 @@ tmux -V
 fzf --version
 dev --help
 cashew
-pi list          # should show message-queue.ts
+ls -l ~/.pi/agent/extensions  # should show message-queue.ts, pi-subscribe.ts, kw-role.ts
 ssh -T git@github.com
 ```
 
@@ -191,5 +193,5 @@ ssh -T git@github.com
 | /setup skill | `~/.claude/skills/setup/` | This bootstrap skill (symlink to repo) |
 | /prompting-worktree-agents skill | `~/.claude/skills/prompting-worktree-agents/` | Socratic prompting loop for worktree agents |
 | /repo-quality-rails-setup skill | `~/.claude/skills/repo-quality-rails-setup/` | Optional quality rails setup skill (from cashew/claude/skills) |
-| Pi message-queue | `pi list` (user package) | Enables `dev send-pi` to deliver messages to pi agents |
+| Pi extensions | `~/.pi/agent/extensions` | message-queue, pi-subscribe, kw-role |
 | Projects folder | `~/<user-choice>` | Where all projects live |
