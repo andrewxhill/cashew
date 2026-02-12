@@ -1663,8 +1663,8 @@ pi_subscribe() {
     local messages_count=1
     local follow=0
     local show_full=0
-    local wait_next=0
-    local show_initial=1
+    local wait_next=1
+    local show_initial=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1678,12 +1678,20 @@ pi_subscribe() {
                 ;;
             --follow|-f)
                 follow=1
+                wait_next=0
+                show_initial=1
                 shift
                 ;;
             --next|-n|--wait)
                 follow=1
                 wait_next=1
                 show_initial=0
+                shift
+                ;;
+            --last|-l)
+                follow=0
+                wait_next=0
+                show_initial=1
                 shift
                 ;;
             --full)
@@ -1704,9 +1712,10 @@ pi_subscribe() {
         echo ""
         echo "Options:"
         echo "  --messages, -m <n>  Show last n entries before following"
-        echo "  --follow, -f        Follow new entries (tail -f)"
-        echo "  --next, -n          Wait for the next entry, then exit"
+        echo "  --next, -n          Wait for the next entry, then exit (default)"
         echo "  --wait              Alias for --next"
+        echo "  --follow, -f        Follow new entries (tail -f)"
+        echo "  --last, -l          Show the last completion and exit"
         echo "  --full              Show full message text"
         exit 1
     fi
@@ -1751,7 +1760,7 @@ pi_subscribe() {
     fi
 
     if [ ! -f "$status_file" ]; then
-        if [ "$follow" -eq 1 ]; then
+        if [ "$follow" -eq 1 ] || [ "$wait_next" -eq 1 ]; then
             local waited=0
             local timeout=10
             while [ ! -f "$status_file" ] && [ "$waited" -lt "$timeout" ]; do
@@ -1830,7 +1839,7 @@ pi_subscribe() {
         fi
     fi
 
-    if [ "$follow" -eq 1 ]; then
+    if [ "$follow" -eq 1 ] || [ "$wait_next" -eq 1 ]; then
         if [ "$wait_next" -eq 1 ]; then
             tail -n 0 -f "$status_file" | while read -r line; do
                 [ -z "$line" ] && continue
@@ -2145,8 +2154,9 @@ case "${1:-}" in
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
-        echo "  dev pi-subscribe <session> [opts] Follow final agent messages"
-        echo "  dev pi-subscribe <session> --next Wait for the next completion entry"
+        echo "  dev pi-subscribe <session> [opts] Wait for next completion (default)"
+        echo "  dev pi-subscribe <session> --last Show last completion and exit"
+        echo "  dev pi-subscribe <session> -f    Follow completions (tail -f)"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
         echo "  dev review-loop               Print PM review loop checklist"
@@ -2165,8 +2175,9 @@ case "${1:-}" in
         echo "  dev cleanup myapp/feature-auth # remove worktree + branch + session"
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
+        echo "  dev pi-subscribe replay/main              # wait for next completion"
+        echo "  dev pi-subscribe replay/main --last       # show last completion"
         echo "  dev pi-subscribe replay/main -f           # follow final messages"
-        echo "  dev pi-subscribe replay/main --next       # wait for next completion"
         echo "  dev kw replay arch --tags risk,api        # start knowledge worker"
         echo "  dev kw-list replay                        # list knowledge workers"
         echo "  dev requirements replay/main/pi          # view session requirements"

@@ -40,8 +40,9 @@ dev kw-tags <repo>/<name> <tags> # Set knowledge-worker tags
 dev kw-note <repo>/<name> <note> # Set knowledge-worker note
 dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
+dev pi-subscribe <session>       # Wait for the next completion entry (default)
 dev pi-subscribe <session> -f    # Follow final agent messages (done events)
-dev pi-subscribe <session> --next # Wait for the next completion entry
+dev pi-subscribe <session> --last # Show the last completion and exit
 dev send <session> <keys>        # Send raw tmux keys (direct input)
 dev send-pi <session> <message>  # Queue a message for a Pi agent (preferred)
 dev reboot [--dry-run]           # Recreate baseline sessions after reboot
@@ -187,8 +188,10 @@ dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
 dev send-pi <repo>/main/kw-<name> "Given this plan, where are the architecture risks and what constraints must we respect?"
 # Ask for QA lens
 dev send-pi <repo>/main/kw-<name> "Review this change for data-timeliness risks and missing checks."
-# Wait for the next completion
-dev pi-subscribe <repo>/main/kw-<name> --next
+# Wait for the next completion (default)
+dev pi-subscribe <repo>/main/kw-<name>
+# Show the last completion
+dev pi-subscribe <repo>/main/kw-<name> --last
 # Or follow all completions
 dev pi-subscribe <repo>/main/kw-<name> -f
 ```
