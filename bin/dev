@@ -1841,10 +1841,24 @@ pi_subscribe() {
 
     if [ "$follow" -eq 1 ] || [ "$wait_next" -eq 1 ]; then
         if [ "$wait_next" -eq 1 ]; then
-            tail -n 0 -f "$status_file" | while read -r line; do
-                [ -z "$line" ] && continue
-                render_line "$line"
-                break
+            local start_lines
+            local current_lines
+            start_lines=$(wc -l < "$status_file" | tr -d ' ')
+            start_lines=${start_lines:-0}
+
+            while true; do
+                current_lines=$(wc -l < "$status_file" | tr -d ' ')
+                current_lines=${current_lines:-0}
+                if [ "$current_lines" -lt "$start_lines" ]; then
+                    start_lines="$current_lines"
+                elif [ "$current_lines" -gt "$start_lines" ]; then
+                    tail -n 1 "$status_file" | while read -r line; do
+                        [ -z "$line" ] && continue
+                        render_line "$line"
+                    done
+                    break
+                fi
+                sleep 1
             done
             return
         fi
