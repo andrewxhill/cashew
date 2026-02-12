@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 function resolveWebAccessPath(): string | null {
@@ -28,16 +28,15 @@ export default function (pi: ExtensionAPI) {
     return;
   }
 
-  const url = pathToFileURL(entry).href + `?v=${Date.now()}`;
-  void import(url)
-    .then((mod) => {
-      if (typeof mod.default === "function") {
-        mod.default(pi);
-      } else {
-        console.error("pi-web-access-wrapper: default export not a function");
-      }
-    })
-    .catch((err) => {
-      console.error("pi-web-access-wrapper: failed to load", err);
-    });
+  try {
+    const require = createRequire(import.meta.url);
+    const mod = require(entry);
+    if (typeof mod?.default === "function") {
+      mod.default(pi);
+    } else {
+      console.error("pi-web-access-wrapper: default export not a function");
+    }
+  } catch (err) {
+    console.error("pi-web-access-wrapper: failed to load", err);
+  }
 }
