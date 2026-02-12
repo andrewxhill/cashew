@@ -1,197 +1,160 @@
+---
+name: setup
+description: >
+  Bootstrap the Cashew dev environment on this machine. Use this skill whenever
+  the user says "set up cashew", "bootstrap my environment", or anything about
+  initial setup. If the user is in this repo and asking for setup, they have
+  everything they need — just run the steps.
+---
+
 # Setup - Bootstrap Dev Environment
 
-Use this skill to set up a new machine with the Cashew dev environment.
+You are running from inside the cashew repo. This IS cashew. Setup means:
+pull the latest, symlink everything into place, and install Pi extensions.
 
-## When to Use
+## End State
 
-When the user asks to set up their dev environment, bootstrap a new machine, or says something like "set up cashew" or "configure my dev setup".
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| dev script | `/usr/local/bin/dev` → `bin/dev` | Project session manager |
+| cashew launcher | `/usr/local/bin/cashew` → `bin/cashew` | tmux + fzf TUI launcher |
+| Global Claude config | `~/.claude/CLAUDE.md` | Cashew context block appended |
+| /dev command | `~/.claude/commands/dev.md` → `claude/commands/dev.md` | Session manager docs |
+| /prompting-worktree-agents | `~/.claude/skills/prompting-worktree-agents/` → `claude/skills/prompting-worktree-agents/` | Socratic prompting for worktree agents |
+| /repo-quality-rails-setup | `~/.claude/skills/repo-quality-rails-setup/` → `claude/skills/repo-quality-rails-setup/` | Optional quality rails setup |
+| Pi extensions | `~/.pi/agent/extensions/` → `pi/extensions/` | message-queue, pi-subscribe, kw-role |
+| Projects folder | `~/<user-choice>` | Where all projects live |
+
+Everything is symlinked back to this repo. `git pull` updates the whole machine.
 
 ## Step 1: Ask the User
 
-Before doing anything, ask:
+Use the AskUserQuestion tool to ask:
 
 1. **What should your projects folder be called?** (default: `~/projects`)
-2. **What's your GitHub email?** (for SSH key)
-3. **Do you want SSH remote access enabled?** (for headless servers)
-4. **Install the optional Repo Quality Rails Setup skill?** (installs the quality-gates skill content)
+2. **Install the optional Repo Quality Rails skill?** (sets up quality gates for repos)
 
-Use the AskUserQuestion tool for this.
+## Step 2: Pull Latest
 
-## Step 2: Install Dependencies
-
-Based on the OS, install the required tools:
-
-### macOS
 ```bash
-# Install Homebrew if not present
-command -v brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install core tools
-brew install git gh tmux
-
-# TUI dependency (optional)
-python3 -m pip install --user textual
-
-# Cashew TUI launcher (optional)
-sudo curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/bin/cashew -o /usr/local/bin/cashew
-sudo chmod +x /usr/local/bin/cashew
-
-# Install Docker Desktop
-brew install --cask docker
-```
-
-### Linux (Debian/Ubuntu)
-```bash
-sudo apt-get update
-sudo apt-get install -y git curl tmux python3-pip
-
-# TUI dependency (optional)
-python3 -m pip install --user textual
-
-# Cashew TUI launcher (optional)
-sudo curl -fsSL https://raw.githubusercontent.com/andrewxhill/cashew/main/bin/cashew -o /usr/local/bin/cashew
-sudo chmod +x /usr/local/bin/cashew
-
-# GitHub CLI
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt-get update && sudo apt-get install -y gh
-
-# Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
+git pull
 ```
 
 ## Step 3: Create Projects Directory
 
 ```bash
-mkdir -p ~/<folder-name-from-step-1>
+mkdir -p ~/<projects-folder>
 ```
 
-## Step 4: Install dev + Cashew TUI
-
-Clone the repo and symlink the binaries so updates are instant:
+## Step 4: Symlink Binaries
 
 ```bash
-# Clone cashew (worktree-based repo)
-mkdir -p ~/<folder-name-from-step-1>/cashew
-cd ~/<folder-name-from-step-1>
-git clone --bare git@github.com:andrewxhill/cashew.git cashew/.bare
-cd cashew
-GIT_DIR=.bare git worktree add main main
-
-# Symlink binaries
-sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/dev /usr/local/bin/dev
-sudo ln -sf ~/<folder-name-from-step-1>/cashew/main/bin/cashew /usr/local/bin/cashew
-
-# Install fzf (required for Cashew TUI)
-if ! command -v fzf >/dev/null 2>&1; then
-  if command -v brew >/dev/null 2>&1; then
-    brew install fzf
-  elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get install -y fzf
-  fi
-fi
+CASHEW_ROOT="$(git rev-parse --show-toplevel)"
+sudo ln -sf "$CASHEW_ROOT/bin/dev" /usr/local/bin/dev
+sudo ln -sf "$CASHEW_ROOT/bin/cashew" /usr/local/bin/cashew
 ```
 
-## Step 5: Install Claude Config (Append Cashew Block)
+## Step 5: Install Claude Config and Skills
 
-Append Cashew's global context block to the end of the user's `~/.claude/CLAUDE.md` (do **not** overwrite). Only add it if the block isn't already present:
+Append the Cashew context block to `~/.claude/CLAUDE.md` if it's not already
+there. Idempotent — running it twice won't duplicate the block.
+
+The setup skill itself is NOT symlinked. It lives in `.claude/skills/` and is
+only available when Claude is in this repo.
 
 ```bash
-mkdir -p ~/.claude/commands
-
-CASHEW_ROOT=~/<folder-name-from-step-1>/cashew/main
-CASHEW_BLOCK=$CASHEW_ROOT/claude/global/CLAUDE.md
+CASHEW_ROOT="$(git rev-parse --show-toplevel)"
+mkdir -p ~/.claude/commands ~/.claude/skills
 TARGET=~/.claude/CLAUDE.md
 
 if ! grep -q "BEGIN CASHEW GLOBAL CONTEXT" "$TARGET" 2>/dev/null; then
   {
     echo ""
     echo "<!-- BEGIN CASHEW GLOBAL CONTEXT -->"
-    sed "s|<cashew-root>|$CASHEW_ROOT|g" "$CASHEW_BLOCK"
+    sed "s|<cashew-root>|$CASHEW_ROOT|g" "$CASHEW_ROOT/claude/global/CLAUDE.md"
     echo "<!-- END CASHEW GLOBAL CONTEXT -->"
   } >> "$TARGET"
 fi
 
-# Symlink commands and skills from the repo
-ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/commands/dev.md ~/.claude/commands/dev.md
-ln -sf ~/<folder-name-from-step-1>/cashew/main/.claude/skills/setup ~/.claude/skills/setup
-ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/skills/prompting-worktree-agents ~/.claude/skills/prompting-worktree-agents
+# Global command
+ln -sf "$CASHEW_ROOT/claude/commands/dev.md" ~/.claude/commands/dev.md
 
-# Optional: Repo Quality Rails Setup skill (only if user opted in)
-ln -sf ~/<folder-name-from-step-1>/cashew/main/claude/skills/repo-quality-rails-setup ~/.claude/skills/repo-quality-rails-setup
+# Global skills
+ln -sf "$CASHEW_ROOT/claude/skills/prompting-worktree-agents" ~/.claude/skills/prompting-worktree-agents
+
+# Optional: Repo Quality Rails (only if user opted in during Step 1)
+ln -sf "$CASHEW_ROOT/claude/skills/repo-quality-rails-setup" ~/.claude/skills/repo-quality-rails-setup
 ```
 
-## Step 6: Install Pi Queue/Subscribe/Knowledge-Worker Extensions
+## Step 6: Install Pi Extensions
 
-Install the extensions globally so they load in every pi session:
+Pi must be installed (`npm install -g @mariozechner/pi-coding-agent`). If `pi`
+isn't on the PATH, install it first.
+
+These extensions enable `dev send-pi` messaging, pub/sub coordination, and
+knowledge worker roles. Symlinked so `git pull` updates them.
 
 ```bash
-# Requires pi to be installed: npm install -g @mariozechner/pi-coding-agent
+CASHEW_ROOT="$(git rev-parse --show-toplevel)"
+
+# Install Pi if missing
+command -v pi || npm install -g @mariozechner/pi-coding-agent
+
 mkdir -p ~/.pi/agent/extensions
-ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/message-queue.ts ~/.pi/agent/extensions/message-queue.ts
-ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/pi-subscribe.ts ~/.pi/agent/extensions/pi-subscribe.ts
-ln -sf ~/<folder-name-from-step-1>/cashew/main/pi/extensions/kw-role.ts ~/.pi/agent/extensions/kw-role.ts
-
-# Verify
-ls -l ~/.pi/agent/extensions
+ln -sf "$CASHEW_ROOT/pi/extensions/message-queue.ts" ~/.pi/agent/extensions/message-queue.ts
+ln -sf "$CASHEW_ROOT/pi/extensions/pi-subscribe.ts" ~/.pi/agent/extensions/pi-subscribe.ts
+ln -sf "$CASHEW_ROOT/pi/extensions/kw-role.ts" ~/.pi/agent/extensions/kw-role.ts
 ```
 
-## Step 7: Configure Git for SSH (if needed)
+## Step 7: Verify
+
+Report what passed/failed — don't run silently.
 
 ```bash
-# Generate SSH key if needed
-[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -C "<user-email>" -f ~/.ssh/id_ed25519 -N ""
-
-# Start agent and add key
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-
-# Configure git to always use SSH for GitHub
-git config --global url."git@github.com:".insteadOf "https://github.com/"
-
-# Show the public key for user to add to GitHub
-echo "Add this SSH key to GitHub:"
-cat ~/.ssh/id_ed25519.pub
-echo ""
-echo "Or run: gh auth login && gh ssh-key add ~/.ssh/id_ed25519.pub"
-```
-
-## Step 8: (If requested) Enable SSH Remote Access
-
-```bash
-# macOS
-sudo systemsetup -setremotelogin on
-
-# Linux
-sudo systemctl enable ssh && sudo systemctl start ssh
-```
-
-## Step 9: Verify Installation
-
-```bash
-docker --version
-git --version
-gh --version
-tmux -V
-fzf --version
 dev --help
-cashew
-ls -l ~/.pi/agent/extensions  # should show message-queue.ts, pi-subscribe.ts, kw-role.ts
-ssh -T git@github.com
+pi --version
+ls -l ~/.pi/agent/extensions/
+ls -l ~/.claude/commands/dev.md
+ls -l ~/.claude/skills/prompting-worktree-agents
 ```
 
-## What Gets Installed
+## Step 8: Tell the User What to Do Next
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| dev script | `/usr/local/bin/dev` | Project session manager (symlink to repo) |
-| cashew launcher | `/usr/local/bin/cashew` | tmux + fzf TUI launcher (symlink to repo) |
-| Global Claude config | `~/.claude/CLAUDE.md` | Cashew block appended (idempotent) |
-| /dev skill | `~/.claude/commands/dev.md` | Full dev documentation (symlink to repo) |
-| /setup skill | `~/.claude/skills/setup/` | This bootstrap skill (symlink to repo) |
-| /prompting-worktree-agents skill | `~/.claude/skills/prompting-worktree-agents/` | Socratic prompting loop for worktree agents |
-| /repo-quality-rails-setup skill | `~/.claude/skills/repo-quality-rails-setup/` | Optional quality rails setup skill (from cashew/claude/skills) |
-| Pi extensions | `~/.pi/agent/extensions` | message-queue, pi-subscribe, kw-role |
-| Projects folder | `~/<user-choice>` | Where all projects live |
+After verification, walk the user through how to start using Cashew:
+
+1. **Go to your projects folder:**
+   ```bash
+   cd ~/<projects-folder>
+   ```
+
+2. **Bootstrap initial sessions** (creates hub and baseline sessions):
+   ```bash
+   dev reboot
+   ```
+
+3. **Or start a new project** — run Claude from the projects folder and ask it
+   to use `dev` to set up a repo. It will clone, configure worktrees, and
+   create sessions:
+   ```bash
+   claude
+   # "Use dev to set up git@github.com:user/myapp"
+   ```
+
+4. **Talk to a project's PM** — each project has a Claude session on `main`
+   that acts as the orchestrator:
+   ```bash
+   dev <project>/main/claude
+   ```
+
+5. **Tell the PM what to build** — the PM uses the `/dev` command to create
+   worktrees, task and monitor worktree agents, and bootstrap knowledge workers.
+
+6. **Drop in anytime** — use `dev` to rejoin any session. Attach to a worktree
+   agent to interact directly, check on a knowledge worker, or rejoin the PM
+   to continue planning:
+   ```bash
+   dev                              # see everything running
+   dev <project>/main/claude        # rejoin PM
+   dev <project>/<feature>/pi       # drop into a worktree agent
+   dev <project>/main/kw-<name>     # check on a knowledge worker
+   ```

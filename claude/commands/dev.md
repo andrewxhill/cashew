@@ -154,61 +154,32 @@ Worktree branches are local by default. You do **not** need to push them to a re
 - Clean separation of concerns
 
 ## Knowledge Workers (long-running domain agents)
-Knowledge workers are persistent Pi sessions anchored on `main` that focus on design, review, risk analysis, and planning.
-They are **not** PM or worktree implementation agents.
-(Requires the `kw-role` extension for role reminders and `/kw-*` commands.)
 
-**Start one (uses default bootstrap if omitted):**
+Knowledge workers are persistent Pi sessions anchored on `main` for design, review, risk analysis, and planning. They are advisors, not implementers. Requires the `kw-role` extension.
+
+**Commands:**
 ```bash
-dev kw <repo> <name> --tags "arch,api"
-# or override with a custom bootstrap
-dev kw <repo> <name> --tags "arch,api" --bootstrap "Review auth architecture and keep a running design guide."
+dev kw <repo> <name> --tags "arch,api"                    # Start a KW
+dev kw <repo> <name> --tags "arch,api" --bootstrap "..."   # Start with custom bootstrap
+dev kw-list <repo>                                         # List all KWs
+dev kw-tags <repo>/<name> "arch,api"                       # Update tags (from shell)
+dev kw-note <repo>/<name> "Owns auth contracts"            # Update note (from shell)
 ```
 
-**List them:**
+Inside a KW session, `/kw-tags` and `/kw-note` update metadata automatically.
+
+**Messaging:**
 ```bash
-dev kw-list <repo>
+dev send-pi <repo>/main/kw-<name> "message"                # Queue a question
+dev send-pi <repo>/main/kw-<name> --await "message"        # Send + wait for response
+dev pi-subscribe <repo>/main/kw-<name>                     # Wait for next completion
+dev pi-subscribe <repo>/main/kw-<name> --last              # Show last completion
+dev pi-subscribe <repo>/main/kw-<name> -f                  # Follow all completions
 ```
 
-**Update metadata (from shell):**
-```bash
-dev kw-tags <repo>/<name> "arch,api"
-dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
-```
+**How to use them:** Ask KWs focused questions — "where are the architecture risks in this plan?", "review this change for data-timeliness issues." They respond with constraints, edge cases, and guidance. Use their output to shape plans before handing work to worktree agents.
 
-**Update metadata (inside the kw session):**
-```
-/kw-tags arch,api
-/kw-note Owns auth architecture and cross-service contracts
-```
-(If a KW includes `/kw-tags` or `/kw-note` in a response, the kw-role extension will apply it automatically.)
-
-**Message + wait (PM usage examples):**
-```bash
-# Ask for design guidance
-dev send-pi <repo>/main/kw-<name> "Given this plan, where are the architecture risks and what constraints must we respect?"
-# Ask for QA lens
-dev send-pi <repo>/main/kw-<name> "Review this change for data-timeliness risks and missing checks."
-# Send + wait in one call
-dev send-pi <repo>/main/kw-<name> --await "Review the plan and respond with risks."
-# Wait for the next completion (default)
-dev pi-subscribe <repo>/main/kw-<name>
-# Show the last completion
-dev pi-subscribe <repo>/main/kw-<name> --last
-# Or follow all completions
-dev pi-subscribe <repo>/main/kw-<name> -f
-```
-
-**PM workflow (example):**
-1. PM drafts plan or change proposal.
-2. PM asks KW for design risks + QA lens.
-3. KW responds with constraints/tests/edge cases.
-4. PM adapts plan and sends guidance to worktree agent.
-
-**Role boundaries:**
-- Knowledge workers are on-demand advisors, not proactive monitors. They answer PM/agent questions.
-- No worktree creation/cleanup, no merges, no destructive dev commands.
-- Provide guidance, reviews, and plans. If asked to implement, answer with advice and a safe plan instead.
+**Role boundaries:** KWs advise — they don't create worktrees, merge branches, or run destructive commands. If asked to implement, they respond with a plan instead.
 
 ## Reviewing a worktree agent (do this before merging)
 
