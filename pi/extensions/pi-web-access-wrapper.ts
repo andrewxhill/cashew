@@ -30,7 +30,9 @@ export default function (pi: ExtensionAPI) {
 
   try {
     const require = createRequire(import.meta.url);
-    const mod = require(entry);
+    const { createJiti } = require("jiti");
+    const jiti = createJiti(import.meta.url, { cache: false, interopDefault: true });
+    const mod = jiti(entry);
     if (typeof mod?.default === "function") {
       mod.default(pi);
     } else {
