@@ -106,6 +106,15 @@ ln -sf "$CASHEW_ROOT/pi/extensions/pi-subscribe.ts" ~/.pi/agent/extensions/pi-su
 ln -sf "$CASHEW_ROOT/pi/extensions/kw-role.ts" ~/.pi/agent/extensions/kw-role.ts
 ```
 
+## Optional: Web Search for Pi
+
+Consider installing [pi-web-access](https://github.com/nicobailon/pi-web-access/blob/main/README.md) for web search in Pi:
+
+```bash
+pi install npm:pi-web-access
+# add keys to ~/.pi/web-search.json (perplexityApiKey and/or geminiApiKey)
+```
+
 ## Step 7: Verify
 
 Report what passed/failed — don't run silently.
