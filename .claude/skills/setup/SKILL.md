@@ -92,7 +92,9 @@ Pi must be installed (`npm install -g @mariozechner/pi-coding-agent`). If `pi`
 isn't on the PATH, install it first.
 
 These extensions enable `dev send-pi` messaging, pub/sub coordination, and
-knowledge worker roles. Symlinked so `git pull` updates them.
+knowledge worker roles. Symlinked so `git pull` updates them. Do NOT remove
+other extensions in `~/.pi/agent/extensions`—users may install their own
+plugins there.
 
 ```bash
 CASHEW_ROOT="$(git rev-parse --show-toplevel)"
@@ -101,9 +103,11 @@ CASHEW_ROOT="$(git rev-parse --show-toplevel)"
 command -v pi || npm install -g @mariozechner/pi-coding-agent
 
 mkdir -p ~/.pi/agent/extensions
+# Only add Cashew symlinks; leave any existing extensions intact.
 ln -sf "$CASHEW_ROOT/pi/extensions/message-queue.ts" ~/.pi/agent/extensions/message-queue.ts
 ln -sf "$CASHEW_ROOT/pi/extensions/pi-subscribe.ts" ~/.pi/agent/extensions/pi-subscribe.ts
 ln -sf "$CASHEW_ROOT/pi/extensions/kw-role.ts" ~/.pi/agent/extensions/kw-role.ts
+ln -sf "$CASHEW_ROOT/pi/extensions/pi-web-access-wrapper.ts" ~/.pi/agent/extensions/pi-web-access-wrapper.ts
 ```
 
 ## Optional: Web Search for Pi
@@ -113,6 +117,8 @@ Consider installing [pi-web-access](https://github.com/nicobailon/pi-web-access/
 ```bash
 pi install npm:pi-web-access
 # add keys to ~/.pi/web-search.json (perplexityApiKey and/or geminiApiKey)
+# load via wrapper for reliable /reload
+ln -sf "$CASHEW_ROOT/pi/extensions/pi-web-access-wrapper.ts" ~/.pi/agent/extensions/pi-web-access-wrapper.ts
 ```
 
 ## Step 7: Verify
