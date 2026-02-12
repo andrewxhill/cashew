@@ -6,6 +6,7 @@
  *
  * Log file: ~/.pi/status/<cwd-hash>.jsonl
  * Entry format:
+ *   {"timestamp": 1710000000000, "status": "working"}
  *   {"timestamp": 1710000000000, "status": "done", "message": "...", ...}
  */
 
@@ -54,6 +55,19 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     statusFile = getStatusFile(ctx.cwd);
     ensureDir(statusFile);
+  });
+
+  pi.on("agent_start", async (_event, ctx) => {
+    if (!statusFile) return;
+
+    const entry = {
+      timestamp: Date.now(),
+      status: "working",
+      cwd: ctx.cwd,
+      sessionFile: ctx.sessionManager.getSessionFile() ?? null,
+    };
+
+    appendFileSync(statusFile, `${JSON.stringify(entry)}\n`);
   });
 
   pi.on("agent_end", async (event, ctx) => {

@@ -33,6 +33,7 @@ CYAN='\033[36m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
 MAGENTA='\033[35m'
+RED='\033[31m'
 RESET='\033[0m'
 
 # Convert path-style (repo/wt/sub) to session name (repo_wt_sub)
@@ -192,6 +193,63 @@ session_backend() {
     return 1
 }
 
+# Get Pi agent status indicator for a working directory.
+# Returns a colored status tag or empty string if no Pi status exists.
+pi_status_tag() {
+    local cwd="$1"
+    local safe_path
+    safe_path=$(echo "$cwd" | tr '[:upper:]' '[:lower:]' | tr '/' '-' | sed 's/^-//')
+
+    local status_file="$HOME/.pi/status/${safe_path}.jsonl"
+    local queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+
+    # No status file = no Pi info to show
+    [ -f "$status_file" ] || return
+
+    local last_line
+    last_line=$(tail -n 1 "$status_file" 2>/dev/null)
+    [ -z "$last_line" ] && return
+
+    # Check if Pi's session file is newer than the status file (agent is mid-turn)
+    local session_file
+    session_file=$(echo "$last_line" | grep -oE '"sessionFile":"[^"]*"' | sed 's/"sessionFile":"//;s/"$//')
+    if [ -n "$session_file" ] && [ -f "$session_file" ]; then
+        local status_mtime session_mtime
+        if [[ "$(uname)" == "Darwin" ]]; then
+            status_mtime=$(stat -f "%m" "$status_file" 2>/dev/null)
+            session_mtime=$(stat -f "%m" "$session_file" 2>/dev/null)
+        else
+            status_mtime=$(stat -c "%Y" "$status_file" 2>/dev/null)
+            session_mtime=$(stat -c "%Y" "$session_file" 2>/dev/null)
+        fi
+        if [ -n "$session_mtime" ] && [ -n "$status_mtime" ] && [ "$session_mtime" -gt "$status_mtime" ]; then
+            echo -e " ${GREEN}● working${RESET}"
+            return
+        fi
+    fi
+
+    # Working: agent_start fired, no agent_end yet (requires updated pi-subscribe extension)
+    if echo "$last_line" | grep -q '"status":"working"'; then
+        echo -e " ${GREEN}● working${RESET}"
+        return
+    fi
+
+    # Queued: pending messages waiting to be processed
+    if [ -f "$queue_file" ] && [ -s "$queue_file" ]; then
+        echo -e " ${YELLOW}● queued${RESET}"
+        return
+    fi
+
+    # Error: last turn had an error AND agent is not actively working
+    if echo "$last_line" | grep -q '"errorMessage"' && ! echo "$last_line" | grep -qE '"errorMessage":\s*null'; then
+        echo -e " ${RED}⚠ error${RESET}"
+        return
+    fi
+
+    # Done/idle
+    echo -e " ${CYAN}○ idle${RESET}"
+}
+
 list_projects() {
     echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
     echo ""
@@ -205,11 +263,13 @@ list_projects() {
         echo -e "  ${GREEN}●${RESET} ${BOLD}hub${RESET} ${DIM}($PROJECTS_DIR root)${RESET}"
         echo "$hub_sessions" | while read -r sess; do
             sess_name=$(echo "$sess" | awk '{print $1}')
+            local tag
+            tag=$(pi_status_tag "$PROJECTS_DIR")
             if [[ "$sess_name" == "hub" ]]; then
-                echo -e "      └─ main ${DIM}(dev hub)${RESET}"
+                echo -e "      └─ main${tag} ${DIM}(dev hub)${RESET}"
             else
                 sub="${sess_name#hub${SEP}}"
-                echo -e "      └─ ${sub} ${DIM}(dev hub/$sub)${RESET}"
+                echo -e "      └─ ${sub}${tag} ${DIM}(dev hub/$sub)${RESET}"
             fi
         done
     else
@@ -240,11 +300,13 @@ list_projects() {
                     echo "$wt_sessions" | while read -r sess; do
                         sess_name=$(echo "$sess" | awk '{print $1}')
                         display=$(to_display_name "$sess_name")
+                        local tag
+                        tag=$(pi_status_tag "$wt_dir")
                         if [[ "$sess_name" == "$session_prefix" ]]; then
-                            echo -e "          └─ main ${DIM}(dev $project/$wt)${RESET}"
+                            echo -e "          └─ main${tag} ${DIM}(dev $project/$wt)${RESET}"
                         else
                             sub="${sess_name#${session_prefix}${SEP}}"
-                            echo -e "          └─ ${sub} ${DIM}(dev $project/$wt/$sub)${RESET}"
+                            echo -e "          └─ ${sub}${tag} ${DIM}(dev $project/$wt/$sub)${RESET}"
                         fi
                     done
                 else
@@ -259,11 +321,13 @@ list_projects() {
                 echo -e "  ${GREEN}●${RESET} ${BOLD}$project${RESET}"
                 echo "$project_sessions" | while read -r sess; do
                     sess_name=$(echo "$sess" | awk '{print $1}')
+                    local tag
+                    tag=$(pi_status_tag "$dir")
                     if [[ "$sess_name" == "$project" ]]; then
-                        echo -e "      └─ main ${DIM}(dev $project)${RESET}"
+                        echo -e "      └─ main${tag} ${DIM}(dev $project)${RESET}"
                     else
                         sub="${sess_name#${project}${SEP}}"
-                        echo -e "      └─ ${sub} ${DIM}(dev $project/$sub)${RESET}"
+                        echo -e "      └─ ${sub}${tag} ${DIM}(dev $project/$sub)${RESET}"
                     fi
                 done
             else
@@ -278,7 +342,11 @@ list_projects() {
         echo "$sessions" | while read -r line; do
             sess=$(echo "$line" | awk '{print $1}')
             display=$(to_display_name "$sess")
-            echo -e "  ${YELLOW}→${RESET} $display ${DIM}[$sess]${RESET}"
+            local tag=""
+            local pane_cwd
+            pane_cwd=$(tmux display-message -p -t "$sess" '#{pane_current_path}' 2>/dev/null)
+            [ -n "$pane_cwd" ] && tag=$(pi_status_tag "$pane_cwd")
+            echo -e "  ${YELLOW}→${RESET} $display${tag} ${DIM}[$sess]${RESET}"
         done
     else
         echo -e "  ${DIM}(none)${RESET}"
