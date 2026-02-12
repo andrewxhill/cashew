@@ -45,6 +45,7 @@ dev pi-subscribe <session> -f    # Follow final agent messages (done events)
 dev pi-subscribe <session> --last # Show the last completion and exit
 dev send <session> <keys>        # Send raw tmux keys (direct input)
 dev send-pi <session> <message>  # Queue a message for a Pi agent (preferred)
+dev send-pi <session> --await "..." # Send and wait for next completion
 dev reboot [--dry-run]           # Recreate baseline sessions after reboot
 ```
 
@@ -188,6 +189,8 @@ dev kw-note <repo>/<name> "Owns auth architecture and cross-service contracts"
 dev send-pi <repo>/main/kw-<name> "Given this plan, where are the architecture risks and what constraints must we respect?"
 # Ask for QA lens
 dev send-pi <repo>/main/kw-<name> "Review this change for data-timeliness risks and missing checks."
+# Send + wait in one call
+dev send-pi <repo>/main/kw-<name> --await "Review the plan and respond with risks."
 # Wait for the next completion (default)
 dev pi-subscribe <repo>/main/kw-<name>
 # Show the last completion

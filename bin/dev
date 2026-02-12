@@ -907,6 +907,7 @@ send_pi() {
     shift
     local mode="followUp"
     local message=""
+    local await_completion=0
 
     # Parse options
     while [[ $# -gt 0 ]]; do
@@ -917,6 +918,10 @@ send_pi() {
                 ;;
             --follow-up|-f|--queue|-q)
                 mode="followUp"
+                shift
+                ;;
+            --await|-w|--wait)
+                await_completion=1
                 shift
                 ;;
             *)
@@ -940,10 +945,13 @@ send_pi() {
         echo "  --queue, -q      Alias for --follow-up"
         echo "  --steer, -s      Interrupt agent mid-run (like Enter)"
         echo "  --enter, -e      Alias for --steer"
+        echo "  --await, -w      Wait for the next completion after sending"
+        echo "  --wait           Alias for --await"
         echo ""
         echo "Examples:"
         echo "  dev send-pi replay/feature 'focus on the error handling next'"
         echo "  dev send-pi replay/main --enter 'stop and explain what you are doing'"
+        echo "  dev send-pi replay/prod-fix --await 'review the plan and respond'"
         echo ""
         echo "Reminder: Always read the agent's last message before nudging."
         echo "  dev pi-status <session> --messages 1"
@@ -1040,6 +1048,10 @@ send_pi() {
     local display_name
     display_name=$(to_display_name "$(to_session_name "$input")")
     echo -e "Queued for ${GREEN}${display_name}${RESET} (${mode}): $message"
+
+    if [ "$await_completion" -eq 1 ]; then
+        pi_subscribe "$input" --next
+    fi
 }
 
 review_loop() {
