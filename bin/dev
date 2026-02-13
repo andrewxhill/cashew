@@ -990,7 +990,7 @@ send_pi() {
     shift
     local mode="followUp"
     local message=""
-    local await_completion=0
+    local await_completion=1
 
     # Parse options
     while [[ $# -gt 0 ]]; do
@@ -1005,6 +1005,10 @@ send_pi() {
                 ;;
             --await|-w|--wait)
                 await_completion=1
+                shift
+                ;;
+            --no-await|--no-wait)
+                await_completion=0
                 shift
                 ;;
             *)
@@ -1028,8 +1032,9 @@ send_pi() {
         echo "  --queue, -q      Alias for --follow-up"
         echo "  --steer, -s      Interrupt agent mid-run (like Enter)"
         echo "  --enter, -e      Alias for --steer"
-        echo "  --await, -w      Wait for the next completion after sending"
+        echo "  --await, -w      Wait for the next completion after sending (default)"
         echo "  --wait           Alias for --await"
+        echo "  --no-await       Send without waiting"
         echo ""
         echo "Examples:"
         echo "  dev send-pi replay/feature 'focus on the error handling next'"
@@ -2304,7 +2309,7 @@ case "${1:-}" in
         echo "  dev kill <session>            Kill a session"
         echo "  dev kill-all                  Kill all sessions"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
-        echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (Alt+Enter default)"
+        echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (awaits by default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
         echo "  dev pi-subscribe <session> [opts] Wait for next completion (default)"
         echo "  dev pi-subscribe <session> --last Show last completion and exit"
