@@ -31,6 +31,8 @@ dev pi-status <session> --messages 1
 dev queue-status <session> -m
 ```
 
+**Messaging rule:** When you expect a response, use `dev send-pi <session> --await "message"` to send and wait in one step. Use plain `dev send-pi` only for fire-and-forget.
+
 **Before merging or reviewing worktree output:**
 ```bash
 dev review-loop

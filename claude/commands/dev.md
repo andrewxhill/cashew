@@ -17,7 +17,7 @@ dev queue-status <session> -m
 dev pi-subscribe <session> -f
 ```
 
-**Messaging rule:** Use `dev send-pi <session> <message>` to queue messages for worktree Pi agents. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
+**Messaging rule:** When you expect a response, use `dev send-pi <session> --await "message"` to send and wait for the next completion in one command. Use plain `dev send-pi` only if you do not need to wait. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
 
 
 ## Quick Reference
@@ -45,8 +45,8 @@ dev pi-subscribe <session>       # Wait for the next completion entry (default)
 dev pi-subscribe <session> -f    # Follow final agent messages (done events)
 dev pi-subscribe <session> --last # Show the last completion and exit
 dev send <session> <keys>        # Send raw tmux keys (direct input)
-dev send-pi <session> <message>  # Queue a message for a Pi agent (preferred)
-dev send-pi <session> --await "..." # Send and wait for next completion
+dev send-pi <session> <message>   # Queue a message (no wait)
+dev send-pi <session> --await "..." # Send + wait for next completion
 dev reboot [--dry-run]           # Recreate baseline sessions after reboot
 ```
 
@@ -169,14 +169,20 @@ dev kw-note <repo>/<name> "Owns auth contracts"            # Update note (from s
 
 Inside a KW session, `/kw-tags` and `/kw-note` update metadata automatically.
 
-**Messaging:**
+**Messaging (default to --await when you expect a response):**
 ```bash
-dev send-pi <repo>/main/kw-<name> "message"                # Queue a question
 dev send-pi <repo>/main/kw-<name> --await "message"        # Send + wait for response
+dev send-pi <repo>/main/kw-<name> "message"                # Queue without waiting
+
 dev pi-subscribe <repo>/main/kw-<name>                     # Wait for next completion
 dev pi-subscribe <repo>/main/kw-<name> --last              # Show last completion
+
+dev pi-subscribe <repo>/main/kw-<name> --last-or-next      # Show last if present, else wait
+
 dev pi-subscribe <repo>/main/kw-<name> -f                  # Follow all completions
 ```
+
+**WARNING:** `pi-subscribe` blocks until the NEXT completion. If the agent is idle and no message is queued, it can hang indefinitely. Check `dev pi-status <session> --messages 1` and `dev queue-status <session> -m` first. If idle, use `--last` (or `--last-or-next`) instead.
 
 **How to use them:** Ask KWs focused questions — "where are the architecture risks in this plan?", "review this change for data-timeliness issues." They respond with constraints, edge cases, and guidance. Use their output to shape plans before handing work to worktree agents.
 

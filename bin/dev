@@ -1760,6 +1760,8 @@ pi_subscribe() {
     local show_full=0
     local wait_next=1
     local show_initial=0
+    local timeout_seconds=0
+    local last_or_next=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1789,6 +1791,21 @@ pi_subscribe() {
                 show_initial=1
                 shift
                 ;;
+            --last-or-next)
+                last_or_next=1
+                follow=0
+                wait_next=1
+                show_initial=0
+                shift
+                ;;
+            --timeout|-t)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --timeout"
+                    exit 1
+                fi
+                timeout_seconds="$2"
+                shift 2
+                ;;
             --full)
                 show_full=1
                 shift
@@ -1811,6 +1828,8 @@ pi_subscribe() {
         echo "  --wait              Alias for --next"
         echo "  --follow, -f        Follow new entries (tail -f)"
         echo "  --last, -l          Show the last completion and exit"
+        echo "  --last-or-next      Show last completion if it exists, otherwise wait"
+        echo "  --timeout, -t <s>   Exit after N seconds if no completion"
         echo "  --full              Show full message text"
         exit 1
     fi
@@ -1920,6 +1939,15 @@ pi_subscribe() {
         echo "  [$(format_time "$ts_ms")] $status_label: $msg"
     }
 
+    if [ "$last_or_next" -eq 1 ]; then
+        local last_line
+        last_line=$(tail -n 1 "$status_file" 2>/dev/null || true)
+        if [ -n "$last_line" ]; then
+            render_line "$last_line"
+            return
+        fi
+    fi
+
     if [ "$show_initial" -eq 1 ]; then
         local lines
         lines=$(tail -n "$messages_count" "$status_file" 2>/dev/null || true)
@@ -1938,8 +1966,10 @@ pi_subscribe() {
         if [ "$wait_next" -eq 1 ]; then
             local start_lines
             local current_lines
+            local start_time
             start_lines=$(wc -l < "$status_file" | tr -d ' ')
             start_lines=${start_lines:-0}
+            start_time=$(date +%s)
 
             while true; do
                 current_lines=$(wc -l < "$status_file" | tr -d ' ')
@@ -1952,6 +1982,14 @@ pi_subscribe() {
                         render_line "$line"
                     done
                     break
+                fi
+                if [ "$timeout_seconds" -gt 0 ]; then
+                    local now
+                    now=$(date +%s)
+                    if [ $((now - start_time)) -ge "$timeout_seconds" ]; then
+                        echo "(timed out waiting for completion)"
+                        return
+                    fi
                 fi
                 sleep 1
             done
@@ -2270,6 +2308,8 @@ case "${1:-}" in
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
         echo "  dev pi-subscribe <session> [opts] Wait for next completion (default)"
         echo "  dev pi-subscribe <session> --last Show last completion and exit"
+        echo "  dev pi-subscribe <session> --last-or-next Show last if present, else wait"
+        echo "  dev pi-subscribe <session> --timeout <s>  Exit after N seconds if no completion"
         echo "  dev pi-subscribe <session> -f    Follow completions (tail -f)"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
