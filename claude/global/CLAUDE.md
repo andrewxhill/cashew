@@ -12,7 +12,8 @@ This environment uses `dev` - a session manager for projects in `~/projects/`.
 
 **Common commands:**
 ```bash
-dev                           # List projects and sessions
+dev                           # List active sessions
+dev ls --full                 # Full project tree
 dev <repo>                    # Create detached if new, attach if exists
 
 dev <repo>/<worktree>/pi      # Create detached if new, attach if exists
@@ -270,6 +271,7 @@ This applies to ANY write operation against trading/ops APIs.
 ## Git Preferences
 
 - Never use HTTPS URLs which require interactive authentication
+- ALWAYS run `git commit`, `git merge`, and `git push` with `--quiet` flag
 
 ### CRITICAL: Never Bypass Git Hooks
 

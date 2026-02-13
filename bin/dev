@@ -250,93 +250,10 @@ pi_status_tag() {
     echo -e " ${CYAN}○ idle${RESET}"
 }
 
-list_projects() {
-    echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
-    echo ""
-
-    # Get all sessions
+list_active_sessions() {
+    local sessions
     sessions=$(get_all_sessions)
 
-    # Show hub session(s) first
-    hub_sessions=$(echo "$sessions" | grep "^hub" || true)
-    if [ -n "$hub_sessions" ]; then
-        echo -e "  ${GREEN}●${RESET} ${BOLD}hub${RESET} ${DIM}($PROJECTS_DIR root)${RESET}"
-        echo "$hub_sessions" | while read -r sess; do
-            sess_name=$(echo "$sess" | awk '{print $1}')
-            local tag
-            tag=$(pi_status_tag "$PROJECTS_DIR")
-            if [[ "$sess_name" == "hub" ]]; then
-                echo -e "      └─ main${tag} ${DIM}(dev hub)${RESET}"
-            else
-                sub="${sess_name#hub${SEP}}"
-                echo -e "      └─ ${sub}${tag} ${DIM}(dev hub/$sub)${RESET}"
-            fi
-        done
-    else
-        echo -e "  ${DIM}○${RESET} hub ${DIM}(dev hub to start)${RESET}"
-    fi
-    echo ""
-
-    for dir in "$PROJECTS_DIR"/*/; do
-        [ -d "$dir" ] || continue
-        project=$(basename "$dir")
-        [[ "$project" == "dev" ]] && continue
-
-        # Check if this is a worktree-based repo
-        if [ -d "$dir/.bare" ]; then
-            echo -e "  ${MAGENTA}◆${RESET} ${BOLD}$project${RESET} ${DIM}(worktrees)${RESET}"
-
-            # List worktrees
-            for wt_dir in "$dir"/*/; do
-                [ -d "$wt_dir" ] || continue
-                wt=$(basename "$wt_dir")
-                [[ "$wt" == ".bare" ]] && continue
-
-                # Check for sessions (using -- separator)
-                session_prefix="${project}${SEP}${wt}"
-                wt_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
-                if [ -n "$wt_sessions" ]; then
-                    echo -e "      ${GREEN}●${RESET} ${CYAN}$wt${RESET}"
-                    echo "$wt_sessions" | while read -r sess; do
-                        sess_name=$(echo "$sess" | awk '{print $1}')
-                        display=$(to_display_name "$sess_name")
-                        local tag
-                        tag=$(pi_status_tag "$wt_dir")
-                        if [[ "$sess_name" == "$session_prefix" ]]; then
-                            echo -e "          └─ main${tag} ${DIM}(dev $project/$wt)${RESET}"
-                        else
-                            sub="${sess_name#${session_prefix}${SEP}}"
-                            echo -e "          └─ ${sub}${tag} ${DIM}(dev $project/$wt/$sub)${RESET}"
-                        fi
-                    done
-                else
-                    echo -e "      ${DIM}○${RESET} ${DIM}$wt${RESET}"
-                fi
-            done
-        else
-            # Regular repo
-            session_prefix="${project}"
-            project_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
-            if [ -n "$project_sessions" ]; then
-                echo -e "  ${GREEN}●${RESET} ${BOLD}$project${RESET}"
-                echo "$project_sessions" | while read -r sess; do
-                    sess_name=$(echo "$sess" | awk '{print $1}')
-                    local tag
-                    tag=$(pi_status_tag "$dir")
-                    if [[ "$sess_name" == "$project" ]]; then
-                        echo -e "      └─ main${tag} ${DIM}(dev $project)${RESET}"
-                    else
-                        sub="${sess_name#${project}${SEP}}"
-                        echo -e "      └─ ${sub}${tag} ${DIM}(dev $project/$sub)${RESET}"
-                    fi
-                done
-            else
-                echo -e "  ${DIM}○${RESET} $project"
-            fi
-        fi
-    done
-
-    echo ""
     echo -e "${BOLD}Active sessions:${RESET}"
     if [ -n "$sessions" ]; then
         echo "$sessions" | while read -r line; do
@@ -351,9 +268,107 @@ list_projects() {
     else
         echo -e "  ${DIM}(none)${RESET}"
     fi
+}
+
+list_projects() {
+    local show_tree="${1:-0}"
+
+    # Get all sessions
+    sessions=$(get_all_sessions)
+
+    if [ "$show_tree" -eq 1 ]; then
+        echo -e "${BOLD}Projects in $PROJECTS_DIR:${RESET}"
+        echo ""
+
+        # Show hub session(s) first
+        hub_sessions=$(echo "$sessions" | grep "^hub" || true)
+        if [ -n "$hub_sessions" ]; then
+            echo -e "  ${GREEN}●${RESET} ${BOLD}hub${RESET} ${DIM}($PROJECTS_DIR root)${RESET}"
+            echo "$hub_sessions" | while read -r sess; do
+                sess_name=$(echo "$sess" | awk '{print $1}')
+                local tag
+                tag=$(pi_status_tag "$PROJECTS_DIR")
+                if [[ "$sess_name" == "hub" ]]; then
+                    echo -e "      └─ main${tag} ${DIM}(dev hub)${RESET}"
+                else
+                    sub="${sess_name#hub${SEP}}"
+                    echo -e "      └─ ${sub}${tag} ${DIM}(dev hub/$sub)${RESET}"
+                fi
+            done
+        else
+            echo -e "  ${DIM}○${RESET} hub ${DIM}(dev hub to start)${RESET}"
+        fi
+        echo ""
+
+        for dir in "$PROJECTS_DIR"/*/; do
+            [ -d "$dir" ] || continue
+            project=$(basename "$dir")
+            [[ "$project" == "dev" ]] && continue
+
+            # Check if this is a worktree-based repo
+            if [ -d "$dir/.bare" ]; then
+                echo -e "  ${MAGENTA}◆${RESET} ${BOLD}$project${RESET} ${DIM}(worktrees)${RESET}"
+
+                # List worktrees
+                for wt_dir in "$dir"/*/; do
+                    [ -d "$wt_dir" ] || continue
+                    wt=$(basename "$wt_dir")
+                    [[ "$wt" == ".bare" ]] && continue
+
+                    # Check for sessions (using -- separator)
+                    session_prefix="${project}${SEP}${wt}"
+                    wt_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
+                    if [ -n "$wt_sessions" ]; then
+                        echo -e "      ${GREEN}●${RESET} ${CYAN}$wt${RESET}"
+                        echo "$wt_sessions" | while read -r sess; do
+                            sess_name=$(echo "$sess" | awk '{print $1}')
+                            display=$(to_display_name "$sess_name")
+                            local tag
+                            tag=$(pi_status_tag "$wt_dir")
+                            if [[ "$sess_name" == "$session_prefix" ]]; then
+                                echo -e "          └─ main${tag} ${DIM}(dev $project/$wt)${RESET}"
+                            else
+                                sub="${sess_name#${session_prefix}${SEP}}"
+                                echo -e "          └─ ${sub}${tag} ${DIM}(dev $project/$wt/$sub)${RESET}"
+                            fi
+                        done
+                    else
+                        echo -e "      ${DIM}○${RESET} ${DIM}$wt${RESET}"
+                    fi
+                done
+            else
+                # Regular repo
+                session_prefix="${project}"
+                project_sessions=$(echo "$sessions" | grep -E "^${session_prefix}($|${SEP})" || true)
+                if [ -n "$project_sessions" ]; then
+                    echo -e "  ${GREEN}●${RESET} ${BOLD}$project${RESET}"
+                    echo "$project_sessions" | while read -r sess; do
+                        sess_name=$(echo "$sess" | awk '{print $1}')
+                        local tag
+                        tag=$(pi_status_tag "$dir")
+                        if [[ "$sess_name" == "$project" ]]; then
+                            echo -e "      └─ main${tag} ${DIM}(dev $project)${RESET}"
+                        else
+                            sub="${sess_name#${project}${SEP}}"
+                            echo -e "      └─ ${sub}${tag} ${DIM}(dev $project/$sub)${RESET}"
+                        fi
+                    done
+                else
+                    echo -e "  ${DIM}○${RESET} $project"
+                fi
+            fi
+        done
+
+        echo ""
+    fi
+
+    list_active_sessions
 
     echo ""
     echo -e "${DIM}Usage: dev hub | dev <repo>[/<worktree>][/<sub>] | dev new <repo> <url>${RESET}"
+    if [ "$show_tree" -eq 0 ]; then
+        echo -e "${DIM}Tip: dev ls --full to show full project tree${RESET}"
+    fi
 }
 
 attach_session() {
@@ -2157,7 +2172,7 @@ hub_session() {
 # Main
 case "${1:-}" in
     "")
-        list_projects
+        list_projects 0
         ;;
     hub|hub/*)
         # Extract sub-session if provided (hub/claude -> claude)
@@ -2224,13 +2239,18 @@ case "${1:-}" in
         reboot_sessions "${@:2}"
         ;;
     "ls"|"list")
-        list_projects
+        if [ "${2:-}" = "--full" ] || [ "${2:-}" = "--tree" ]; then
+            list_projects 1
+        else
+            list_projects 0
+        fi
         ;;
     "help"|"-h"|"--help")
         echo "dev - Project session manager (with git worktree support)"
         echo ""
         echo "Commands:"
-        echo "  dev                           List projects and sessions"
+        echo "  dev                           List active sessions"
+        echo "  dev ls [--full]              List active sessions (or full project tree)"
         echo "  dev hub                       Attach to hub session at ~/projects root"
         echo "  dev hub/<sub>                 Hub sub-session (e.g., hub/claude)"
         echo "  dev <repo>                    Attach to default worktree/session"
@@ -2258,6 +2278,7 @@ case "${1:-}" in
         echo ""
         echo "Examples:"
         echo "  dev hub                       # root session at ~/projects"
+        echo "  dev ls --full                 # full project tree"
         echo "  dev hub/claude                # claude session at root"
         echo "  dev new myapp git@github.com:user/myapp"
         echo "  dev myapp                     # default (main) worktree"

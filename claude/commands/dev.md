@@ -23,8 +23,9 @@ dev pi-subscribe <session> -f
 ## Quick Reference
 
 ```bash
-dev                              # List all projects and active sessions
+dev                              # List active sessions
 dev hub                          # Open hub session at ~/projects root
+dev ls --full                    # Full project tree
 dev hub/<sub>                    # Hub sub-session (e.g., hub/claude)
 dev <repo>                       # Open main session for a repo
 dev <repo>/<worktree>            # Open specific worktree (for worktree-based repos)
