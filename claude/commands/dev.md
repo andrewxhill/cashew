@@ -192,6 +192,15 @@ dev pi-subscribe <repo>/main/kw-<name> -f                  # Follow all completi
 
 **Role boundaries:** KWs advise — they don't create worktrees, merge branches, or run destructive commands. If asked to implement, they respond with a plan instead.
 
+## Handling context_length_exceeded (do NOT kill the session)
+
+**Never kill a worktree agent session (`dev kill`) when the agent hits `context_length_exceeded`.** A crash is not completion. Unstaged changes and in-progress edits remain on disk in the worktree.
+
+**Do this instead:**
+1. Start a new session: `dev <repo>/<worktree>/pi`
+2. Send a consolidated prompt summarizing what they were doing and warn about unstaged changes to preserve.
+3. Only kill sessions when merging/cleaning up the worktree or abandoning the work entirely.
+
 ## Reviewing a worktree agent (do this before merging)
 
 Use the **review loop** from the PM session:
