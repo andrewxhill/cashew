@@ -17,7 +17,7 @@ dev queue-status <session> -m
 dev pi-subscribe <session> -f
 ```
 
-**Orchestrator messaging rule:** When you expect a response, use `dev send-pi <session> "message"` (waits by default). Use `--no-await` for fire-and-forget. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
+**Orchestrator messaging rule:** Always use `dev send-pi <session> "message"` (auto-subscribes and waits). If you don't want to block, run it in the background (e.g., append `&`) instead of using `--no-await`. Only use `--no-await` for true fire-and-forget. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
 
 **WARNING:** `pi-subscribe` blocks until the NEXT completion. If the agent is idle and no message is queued, it can hang indefinitely. Check `dev pi-status <session> --messages 1` and `dev queue-status <session> -m` first. If idle, use `--last` (or `--last-or-next`) instead.
 
