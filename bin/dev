@@ -2242,9 +2242,6 @@ case "${1:-}" in
     "cleanup")
         cleanup_worktree "$2" "${@:3}"
         ;;
-    "kill-all")
-        kill_all_sessions
-        ;;
     "send")
         send_keys "$2" "${@:3}"
         ;;
@@ -2278,9 +2275,6 @@ case "${1:-}" in
     "review-loop")
         review_loop
         ;;
-    "reboot")
-        reboot_sessions "${@:2}"
-        ;;
     "ls"|"list")
         if [ "${2:-}" = "--full" ] || [ "${2:-}" = "--tree" ]; then
             list_projects 1
@@ -2307,7 +2301,6 @@ case "${1:-}" in
         echo "  dev kw-tags <repo>/<name> <tags>  Set knowledge-worker tags"
         echo "  dev kw-note <repo>/<name> <note>  Set knowledge-worker note"
         echo "  dev kill <session>            Kill a session"
-        echo "  dev kill-all                  Kill all sessions"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (awaits by default)"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
@@ -2319,7 +2312,6 @@ case "${1:-}" in
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
         echo "  dev review-loop               Print PM review loop checklist"
-        echo "  dev reboot [--dry-run]        Recreate baseline sessions after reboot"
         echo ""
         echo "Examples:"
         echo "  dev hub                       # root session at ~/projects"
@@ -2342,8 +2334,6 @@ case "${1:-}" in
         echo "  dev kw-list replay                        # list knowledge workers"
         echo "  dev requirements replay/main/pi          # view session requirements"
         echo "  dev review-loop                          # print PM review loop"
-        echo "  dev reboot --dry-run                     # show sessions to recreate"
-        echo "  dev reboot                               # recreate baseline sessions"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
         echo ""
         echo "Reminder: Read the last agent message before nudging:"

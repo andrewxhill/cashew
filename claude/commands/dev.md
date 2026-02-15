@@ -6,7 +6,7 @@ Use the `dev` command to manage tmux-backed project sessions in `~/projects/`.
 
 **Auto-start:** New sessions start their auto-command (`pi` for worktrees, `claude` for regular repos) automatically.
 **Detached by default:** Creating a new session always creates it detached and prints how to attach. Running `dev` against an existing session attaches to it. This means agents can safely create sessions without needing a terminal.
-**Pi runs in sub-sessions:** Pi always runs in `/pi` sub-sessions (e.g., `dev repo/worktree/pi`), not the base session. This is consistent across `dev wt`, `dev reboot`, and manual session creation.
+**Pi runs in sub-sessions:** Pi always runs in `/pi` sub-sessions (e.g., `dev repo/worktree/pi`), not the base session. This is consistent across `dev wt` and manual session creation.
 **Important:** For worktree agents, use `/pi` sub-sessions (not `/claude`) so message tools target the correct agent session.
 **Rule:** Never nudge a worktree agent without reading its last message first:
 ```bash
@@ -36,7 +36,6 @@ dev new <repo> <git-url>         # Clone repo with worktree structure
 dev wt <repo> <branch> [base]    # Add a new worktree for a branch
 dev cleanup <repo>/<worktree>    # Remove worktree + branch + session (requires --force if unmerged)
 dev kill <session>               # Kill a specific session
-dev kill-all                     # Kill all sessions
 dev kw <repo> <name>             # Start a knowledge-worker session
 dev kw-list [repo]               # List knowledge workers
 dev kw-tags <repo>/<name> <tags> # Set knowledge-worker tags
@@ -51,7 +50,6 @@ dev pi-subscribe <session> --timeout 120  # Exit after N seconds if no completio
 dev send <session> <keys>        # Send raw tmux keys (direct input)
 dev send-pi <session> "message"   # Send + wait (default)
 dev send-pi <session> --no-await "message" # Send without waiting
-dev reboot [--dry-run]           # Recreate baseline sessions after reboot
 ```
 
 ## Project Structure
@@ -235,9 +233,8 @@ Quick version:
 
 1. Always use sub-sessions for long-running processes (Claude, servers)
 2. Use `dev send-pi <session> <message>` when messaging worktree agents; it queues safely. Use `dev send` only for raw keystrokes.
-3. After reboot, run `dev reboot` to recreate baseline sessions (hub pi/claude, repo main pi/claude, feature worktree pi).
-4. `dev cleanup` now blocks if the branch has commits not in main; re-run with `--force` only after deciding it's safe to discard.
-5. The session persists even if you close SSH or terminal (until reboot)
-6. Use `dev` with no args to see all projects and active sessions
-7. Worktree repos let you work on multiple branches simultaneously
-8. Main Claude is your "project manager" - use it to orchestrate features
+3. `dev cleanup` now blocks if the branch has commits not in main; re-run with `--force` only after deciding it's safe to discard.
+4. The session persists even if you close SSH or terminal (until reboot)
+5. Use `dev` with no args to see all projects and active sessions
+6. Worktree repos let you work on multiple branches simultaneously
+7. Main Claude is your "project manager" - use it to orchestrate features
