@@ -14,7 +14,7 @@ dev pi-status <session> --messages 1
 # optionally check pending queue
 dev queue-status <session> -m
 # if you need to wait for completion
-dev pi-subscribe <session> -f
+dev pi-subscribe <session>
 ```
 
 **Orchestrator messaging rule:** Always use `dev send-pi <session> "message"` (auto-subscribes and waits). If you don't want to block, run it in the background (e.g., append `&`) instead of using `--no-await`. Only use `--no-await` for true fire-and-forget. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
@@ -45,7 +45,6 @@ dev kw-note <repo>/<name> <note> # Set knowledge-worker note
 dev pi-status <session>          # Check agent status/last messages
 dev queue-status <session> -m    # Check pending queue
 dev pi-subscribe <session>       # Wait for the next completion entry (default)
-dev pi-subscribe <session> -f    # Follow final agent messages (done events)
 dev pi-subscribe <session> --last # Show the last completion and exit
 dev pi-subscribe <session> --last-or-next # Show last if present, else wait
 dev pi-subscribe <session> --timeout 120  # Exit after N seconds if no completion
@@ -183,8 +182,6 @@ dev pi-subscribe <repo>/main/kw-<name>                     # Wait for next compl
 dev pi-subscribe <repo>/main/kw-<name> --last              # Show last completion
 
 dev pi-subscribe <repo>/main/kw-<name> --last-or-next      # Show last if present, else wait
-
-dev pi-subscribe <repo>/main/kw-<name> -f                  # Follow all completions
 ```
 
 **WARNING:** `pi-subscribe` blocks until the NEXT completion. If the agent is idle and no message is queued, it can hang indefinitely. Check `dev pi-status <session> --messages 1` and `dev queue-status <session> -m` first. If idle, use `--last` (or `--last-or-next`) instead.
@@ -224,7 +221,7 @@ Quick version:
    ```bash
    dev pi-status <session> --messages 1
    dev queue-status <session> -m
-   dev pi-subscribe <session> -f
+   dev pi-subscribe <session>
    ```
 2. Check for session requirements/notes if they were set:
    ```bash
