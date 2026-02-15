@@ -991,6 +991,7 @@ send_pi() {
     local mode="followUp"
     local message=""
     local await_completion=1
+    local timeout_seconds=0
 
     # Parse options
     while [[ $# -gt 0 ]]; do
@@ -1010,6 +1011,14 @@ send_pi() {
             --no-await|--no-wait)
                 await_completion=0
                 shift
+                ;;
+            --timeout|-t)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --timeout"
+                    exit 1
+                fi
+                timeout_seconds="$2"
+                shift 2
                 ;;
             *)
                 if [ -z "$message" ]; then
@@ -1035,6 +1044,7 @@ send_pi() {
         echo "  --await, -w      Wait for the next completion after sending (default)"
         echo "  --wait           Alias for --await"
         echo "  --no-await       Send without waiting"
+        echo "  --timeout, -t <s> Exit after N seconds if no completion"
         echo ""
         echo "Examples:"
         echo "  dev send-pi replay/feature 'focus on the error handling next'"
@@ -1138,8 +1148,127 @@ send_pi() {
     echo -e "Queued for ${GREEN}${display_name}${RESET} (${mode}): $message"
 
     if [ "$await_completion" -eq 1 ]; then
-        pi_subscribe "$input" --next
+        if [ "$timeout_seconds" -gt 0 ]; then
+            pi_subscribe "$input" --next --timeout "$timeout_seconds"
+        else
+            pi_subscribe "$input" --next
+        fi
     fi
+}
+
+default_pi_session_from_cwd() {
+    local cwd="${PWD}"
+
+    if [[ "$cwd" != "$PROJECTS_DIR"/* ]]; then
+        return 1
+    fi
+
+    local rel="${cwd#$PROJECTS_DIR/}"
+    local repo="${rel%%/*}"
+
+    if [ -z "$repo" ]; then
+        return 1
+    fi
+
+    local repo_dir="$PROJECTS_DIR/$repo"
+    if [ ! -d "$repo_dir" ]; then
+        return 1
+    fi
+
+    if [ -d "$repo_dir/.bare" ]; then
+        local rest="${rel#*/}"
+        local worktree="${rest%%/*}"
+        if [ -z "$rest" ] || [ "$rest" = "$rel" ] || [ -z "$worktree" ]; then
+            worktree="main"
+        fi
+        echo "$repo/$worktree/pi"
+    else
+        echo "$repo/pi"
+    fi
+}
+
+pi_gh_assign() {
+    local issue=""
+    local timeout_seconds=900
+    local await_completion=1
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout|-t)
+                if [ -z "${2:-}" ]; then
+                    echo "Missing value for --timeout"
+                    exit 1
+                fi
+                timeout_seconds="$2"
+                shift 2
+                ;;
+            --no-await|--no-wait)
+                await_completion=0
+                shift
+                ;;
+            --await|--wait)
+                await_completion=1
+                shift
+                ;;
+            *)
+                if [ -z "$issue" ]; then
+                    issue="$1"
+                else
+                    echo "Unexpected argument: $1"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$issue" ]; then
+        echo "Usage: dev pi-gh-assign <issue-number> [--timeout <s>]"
+        echo ""
+        echo "Send a GitHub issue assignment prompt to the current repo's pi session."
+        echo ""
+        echo "Options:"
+        echo "  --timeout, -t <s> Exit after N seconds if no completion"
+        echo "  --no-await       Send without waiting"
+        exit 1
+    fi
+
+    if ! [[ "$issue" =~ ^[0-9]+$ ]]; then
+        echo "Issue number must be numeric: $issue"
+        exit 1
+    fi
+
+    local session
+    session=$(default_pi_session_from_cwd || true)
+
+    if [ -z "$session" ]; then
+        echo "Unable to infer session from cwd ($PWD)."
+        echo "Run from inside ~/projects/<repo>/<worktree>/, or use dev send-pi directly."
+        exit 1
+    fi
+
+    local message
+    printf -v message "%s\n" \
+        "You are assigned to GitHub issue #${issue}." \
+        "" \
+        "Follow this process:" \
+        "1) Read the issue with GitHub CLI and include comments:" \
+        "   gh issue view ${issue} --comments" \
+        "2) Implement ALL required changes in this worktree (code + tests + docs as needed). If this is a major change, update README(s) and AGENTS.md with relevant context." \
+        "3) Commit with \"fixes #${issue}\" in the commit message (exact string)." \
+        "4) Validate everything described in the issue. Do not leave TODOs or partial work." \
+        "5) Do not output a plan and wait for approval — proceed directly with implementation." \
+        "6) Report back with a summary and any follow-ups."
+
+    local args=()
+    if [ "$await_completion" -eq 0 ]; then
+        args+=(--no-await)
+    fi
+    if [ "$timeout_seconds" -gt 0 ]; then
+        args+=(--timeout "$timeout_seconds")
+    fi
+
+    send_pi "$session" "${args[@]}" "$message"
 }
 
 review_loop() {
@@ -2248,6 +2377,9 @@ case "${1:-}" in
     "send-pi")
         send_pi "$2" "${@:3}"
         ;;
+    "pi-gh-assign")
+        pi_gh_assign "${@:2}"
+        ;;
     "kw")
         kw_session "$2" "$3" "${@:4}"
         ;;
@@ -2303,6 +2435,7 @@ case "${1:-}" in
         echo "  dev kill <session>            Kill a session"
         echo "  dev send <session> <keys>     Send raw tmux keys (e.g., start pi)"
         echo "  dev send-pi <session> <msg>   Send message to pi agent's queue (awaits by default)"
+        echo "  dev pi-gh-assign <issue>      Send issue instructions to current repo pi session"
         echo "  dev pi-status <session> [opts] Show recent pi agent activity"
         echo "  dev pi-subscribe <session> [opts] Wait for next completion (default)"
         echo "  dev pi-subscribe <session> --last Show last completion and exit"
@@ -2327,6 +2460,7 @@ case "${1:-}" in
         echo "  dev cleanup myapp/feature-auth # remove worktree + branch + session"
         echo "  dev send replay/arb-admin-sse 'pi' Enter  # start pi in session"
         echo "  dev send-pi replay/main 'focus on tests'  # queue for pi agent"
+        echo "  dev pi-gh-assign 123                      # assign issue #123 in current repo"
         echo "  dev pi-subscribe replay/main              # wait for next completion"
         echo "  dev pi-subscribe replay/main --last       # show last completion"
         echo "  dev pi-subscribe replay/main -f           # follow final messages"
