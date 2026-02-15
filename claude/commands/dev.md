@@ -19,6 +19,8 @@ dev pi-subscribe <session> -f
 
 **Orchestrator messaging rule:** Always use `dev send-pi <session> "message"` (auto-subscribes and waits). If you don't want to block, run it in the background (e.g., append `&`) instead of using `--no-await`. Only use `--no-await` for true fire-and-forget. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
 
+**Issue assignment helper:** `dev pi-gh-assign <issue>` sends a standardized GH issue prompt to the current repo’s `/pi` session based on your cwd. Run it from inside `~/projects/<repo>/<worktree>/`. It auto-subscribes like `send-pi`, so if it times out you can recover with `dev pi-subscribe <session> --last` (or `--last-or-next`). If the agent replies with a plan, follow up with `dev send-pi <session> "feedback"` to continue.
+
 **WARNING:** `pi-subscribe` blocks until the NEXT completion. If the agent is idle and no message is queued, it can hang indefinitely. Check `dev pi-status <session> --messages 1` and `dev queue-status <session> -m` first. If idle, use `--last` (or `--last-or-next`) instead.
 
 
@@ -50,6 +52,7 @@ dev pi-subscribe <session> --timeout 120  # Exit after N seconds if no completio
 dev send <session> <keys>        # Send raw tmux keys (direct input)
 dev send-pi <session> "message"   # Send + wait (default)
 dev send-pi <session> --no-await "message" # Send without waiting
+dev pi-gh-assign <issue>          # Send GH issue assignment to current repo pi session (auto-subscribes)
 ```
 
 ## Project Structure
