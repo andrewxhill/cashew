@@ -19,6 +19,16 @@ dev pi-subscribe <session>
 
 **Orchestrator messaging rule:** Always use `dev send-pi <session> "message"` (auto-subscribes and waits). If you don't want to block, run it in the background (e.g., append `&`) instead of using `--no-await`. Only use `--no-await` for true fire-and-forget. Only use `dev send` for raw tmux key input when you explicitly need keystrokes (e.g., Enter/Ctrl-C).
 
+**Anti-pattern (do NOT do this):**
+```bash
+# ❌ don't split send + subscribe
+- dev send-pi <session> --no-await "message"
+- dev pi-subscribe <session>
+
+# ✅ do this instead
+- dev send-pi <session> "message" &
+```
+
 **Issue assignment helper:** `dev pi-gh-assign <issue>` sends a standardized GH issue prompt to the current repo’s `/pi` session based on your cwd. Run it from inside `~/projects/<repo>/<worktree>/`. It auto-subscribes like `send-pi`, so if it times out you can recover with `dev pi-subscribe <session> --last` (or `--last-or-next`). If the agent replies with a plan, follow up with `dev send-pi <session> "feedback"` to continue.
 
 **WARNING:** `pi-subscribe` blocks until the NEXT completion. If the agent is idle and no message is queued, it can hang indefinitely. Check `dev pi-status <session> --messages 1` and `dev queue-status <session> -m` first. If idle, use `--last` (or `--last-or-next`) instead.
@@ -43,6 +53,7 @@ dev kw-list [repo]               # List knowledge workers
 dev kw-tags <repo>/<name> <tags> # Set knowledge-worker tags
 dev kw-note <repo>/<name> <note> # Set knowledge-worker note
 dev pi-status <session>          # Check agent status/last messages
+dev review <session>             # Show completion status + git log/diff
 dev queue-status <session> -m    # Check pending queue
 dev pi-subscribe <session>       # Wait for the next completion entry (default)
 dev pi-subscribe <session> --last # Show the last completion and exit

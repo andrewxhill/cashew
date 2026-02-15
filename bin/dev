@@ -1271,6 +1271,188 @@ pi_gh_assign() {
     send_pi "$session" "${args[@]}" "$message"
 }
 
+review_session() {
+    local input="$1"
+
+    if [ -z "$input" ]; then
+        echo "Usage: dev review <session>"
+        echo ""
+        echo "Show the latest completion status plus git log/diff if commits exist."
+        exit 1
+    fi
+
+    IFS='/' read -ra parts <<< "$input"
+    local repo="${parts[0]}"
+    local worktree="${parts[1]:-main}"
+    local repo_dir="$PROJECTS_DIR/$repo"
+    local target_dir=""
+    local sub=""
+
+    if [ -d "$repo_dir/.bare" ]; then
+        target_dir="$repo_dir/$worktree"
+        sub="${parts[2]:-}"
+    else
+        target_dir="$repo_dir"
+        sub="${parts[1]:-}"
+    fi
+
+    if [ ! -d "$target_dir" ]; then
+        echo "Directory not found: $target_dir"
+        exit 1
+    fi
+
+    local status_file=""
+    local queue_file=""
+    local session_dir="$target_dir"
+
+    if [[ "$sub" == kw-* ]]; then
+        local kw_name
+        kw_name="${sub#kw-}"
+        status_file=$(kw_meta_get "$repo" "$kw_name" "statusFile")
+        if [ -z "$status_file" ]; then
+            status_file=$(kw_status_file "$repo" "$kw_name")
+        fi
+        queue_file=$(kw_meta_get "$repo" "$kw_name" "queueFile")
+        if [ -z "$queue_file" ]; then
+            queue_file=$(kw_queue_file "$repo" "$kw_name")
+        fi
+    else
+        if [ -n "$sub" ]; then
+            local sub_dir="$target_dir/$sub"
+            local dot_sub_dir="$target_dir/.${sub}"
+            local chosen=""
+
+            for candidate in "$sub_dir" "$dot_sub_dir"; do
+                if [ -d "$candidate" ]; then
+                    local safe_candidate
+                    safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+                    local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
+                    if [ -d "$session_candidate" ]; then
+                        chosen="$candidate"
+                        break
+                    fi
+                fi
+            done
+
+            if [ -n "$chosen" ]; then
+                session_dir="$chosen"
+            fi
+        fi
+
+        local safe_path
+        safe_path=$(echo "$session_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+        status_file="$HOME/.pi/status/${safe_path}.jsonl"
+        queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+
+        if [ ! -f "$status_file" ]; then
+            safe_path=$(echo "$session_dir" | sed 's|/|-|g' | sed 's|^-||')
+            status_file="$HOME/.pi/status/${safe_path}.jsonl"
+            queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
+        fi
+    fi
+
+    if [ ! -f "$status_file" ]; then
+        echo "No status file found for: $input"
+        echo "Expected: $status_file"
+        exit 1
+    fi
+
+    format_time() {
+        local ts_ms="$1"
+        if [ -z "$ts_ms" ] || [ "$ts_ms" = "null" ]; then
+            echo "unknown"
+            return
+        fi
+        if ! [[ "$ts_ms" =~ ^[0-9]+$ ]]; then
+            echo "unknown"
+            return
+        fi
+        local ts_s=$((ts_ms / 1000))
+        date -r "$ts_s" "+%Y-%m-%d %H:%M:%S"
+    }
+
+    local last_line
+    last_line=$(tail -n 1 "$status_file" 2>/dev/null || true)
+
+    if [ -z "$last_line" ]; then
+        echo "(no status entries)"
+    else
+        local status
+        local ts_ms
+        local msg
+        local stop_reason
+        local error_msg
+        status=$(echo "$last_line" | jq -r '.status // "done"' 2>/dev/null)
+        ts_ms=$(echo "$last_line" | jq -r '.timestamp // 0' 2>/dev/null)
+        msg=$(echo "$last_line" | jq -r '.message // ""' 2>/dev/null)
+        stop_reason=$(echo "$last_line" | jq -r '.stopReason // empty' 2>/dev/null)
+        error_msg=$(echo "$last_line" | jq -r '.errorMessage // empty' 2>/dev/null)
+
+        if [ -z "$msg" ]; then
+            msg="(no text)"
+        fi
+
+        local status_label="$status"
+        if [ -n "$stop_reason" ]; then
+            status_label="$status ($stop_reason)"
+        fi
+        if [ -n "$error_msg" ]; then
+            status_label="$status error: $error_msg"
+        fi
+
+        echo -e "${BOLD}Status:${RESET} $status_label"
+        echo -e "${DIM}Time:${RESET} $(format_time "$ts_ms")"
+        echo -e "${BOLD}Summary:${RESET} $msg"
+
+        if [ "$status" = "working" ]; then
+            echo -e "${YELLOW}Warning:${RESET} agent appears to be mid-work."
+        else
+            if [ -f "$queue_file" ] && [ -s "$queue_file" ]; then
+                echo -e "${YELLOW}Warning:${RESET} queued messages are pending delivery."
+            else
+                echo -e "${DIM}Agent idle; waiting for instructions.${RESET}"
+            fi
+        fi
+    fi
+
+    echo ""
+
+    if [ ! -d "$target_dir/.git" ] && [ ! -d "$target_dir/.bare" ]; then
+        if ! git -C "$target_dir" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "No git repository found at: $target_dir"
+            return
+        fi
+    fi
+
+    local base_branch=""
+    if git -C "$target_dir" show-ref --verify --quiet refs/heads/main; then
+        base_branch="main"
+    elif git -C "$target_dir" show-ref --verify --quiet refs/heads/master; then
+        base_branch="master"
+    fi
+
+    if [ -n "$base_branch" ]; then
+        local commit_count
+        commit_count=$(git -C "$target_dir" rev-list --count "${base_branch}..HEAD" 2>/dev/null || echo 0)
+
+        if [ "$commit_count" -eq 0 ]; then
+            echo "No commits ahead of ${base_branch}."
+        else
+            echo -e "${BOLD}Commits (${base_branch}..HEAD):${RESET}"
+            git -C "$target_dir" log --oneline --decorate "${base_branch}..HEAD"
+            echo ""
+            echo -e "${BOLD}Diff (${base_branch}..HEAD):${RESET}"
+            git -C "$target_dir" diff "${base_branch}..HEAD"
+        fi
+    else
+        echo -e "${BOLD}Commits (last 5):${RESET}"
+        git -C "$target_dir" log --oneline -n 5
+        echo ""
+        echo -e "${BOLD}Working tree status:${RESET}"
+        git -C "$target_dir" status -sb
+    fi
+}
+
 review_loop() {
     echo "Review loop (PM session):"
     echo "  1) List sessions: dev list"
@@ -1893,7 +2075,7 @@ pi_subscribe() {
     local show_full=0
     local wait_next=1
     local show_initial=0
-    local timeout_seconds=0
+    local timeout_seconds=-1
     local last_or_next=0
 
     while [[ $# -gt 0 ]]; do
@@ -1978,6 +2160,8 @@ pi_subscribe() {
     fi
 
     local status_file=""
+    local queue_file=""
+
     if [[ "$sub" == kw-* ]]; then
         local kw_name
         kw_name="${sub#kw-}"
@@ -1985,14 +2169,42 @@ pi_subscribe() {
         if [ -z "$status_file" ]; then
             status_file=$(kw_status_file "$repo" "$kw_name")
         fi
+        queue_file=$(kw_meta_get "$repo" "$kw_name" "queueFile")
+        if [ -z "$queue_file" ]; then
+            queue_file=$(kw_queue_file "$repo" "$kw_name")
+        fi
     else
+        if [ -n "$sub" ]; then
+            local sub_dir="$target_dir/$sub"
+            local dot_sub_dir="$target_dir/.${sub}"
+            local chosen=""
+
+            for candidate in "$sub_dir" "$dot_sub_dir"; do
+                if [ -d "$candidate" ]; then
+                    local safe_candidate
+                    safe_candidate=$(echo "$candidate" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
+                    local session_candidate="$HOME/.pi/agent/sessions/--${safe_candidate}--"
+                    if [ -d "$session_candidate" ]; then
+                        chosen="$candidate"
+                        break
+                    fi
+                fi
+            done
+
+            if [ -n "$chosen" ]; then
+                target_dir="$chosen"
+            fi
+        fi
+
         local safe_path
         safe_path=$(echo "$target_dir" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's|^-||')
         status_file="$HOME/.pi/status/${safe_path}.jsonl"
+        queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
 
         if [ ! -f "$status_file" ]; then
             safe_path=$(echo "$target_dir" | sed 's|/|-|g' | sed 's|^-||')
             status_file="$HOME/.pi/status/${safe_path}.jsonl"
+            queue_file="$HOME/.pi/queues/${safe_path}.jsonl"
         fi
     fi
 
@@ -2011,6 +2223,16 @@ pi_subscribe() {
         echo ""
         echo "Make sure the pi-subscribe extension is loaded."
         exit 1
+    fi
+
+    if [ "$wait_next" -eq 1 ] && [ "$timeout_seconds" -lt 0 ]; then
+        local last_status
+        last_status=$(tail -n 1 "$status_file" 2>/dev/null | jq -r '.status // empty' 2>/dev/null)
+        if [ "$last_status" = "working" ]; then
+            timeout_seconds=900
+        else
+            timeout_seconds=30
+        fi
     fi
 
     format_time() {
@@ -2383,6 +2605,9 @@ case "${1:-}" in
     "requirements")
         requirements "$2" "${@:3}"
         ;;
+    "review")
+        review_session "$2"
+        ;;
     "review-loop")
         review_loop
         ;;
@@ -2422,6 +2647,7 @@ case "${1:-}" in
         echo "  dev pi-subscribe <session> --timeout <s>  Exit after N seconds if no completion"
         echo "  dev queue-status <session> [opts] Inspect or clear queue files"
         echo "  dev requirements <session>    View/set session requirements/notes"
+        echo "  dev review <session>          Show completion status + git log/diff"
         echo "  dev review-loop               Print PM review loop checklist"
         echo ""
         echo "Examples:"
@@ -2445,6 +2671,7 @@ case "${1:-}" in
         echo "  dev kw-list replay                        # list knowledge workers"
         echo "  dev requirements replay/main/pi          # view session requirements"
         echo "  dev review-loop                          # print PM review loop"
+        echo "  dev review replay/main/pi               # status + log/diff summary"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
         echo ""
         echo "Reminder: Read the last agent message before nudging:"
