@@ -2319,11 +2319,15 @@ pi_subscribe() {
             if [ "$current_lines" -lt "$start_lines" ]; then
                 start_lines="$current_lines"
             elif [ "$current_lines" -gt "$start_lines" ]; then
-                tail -n 1 "$status_file" | while read -r line; do
-                    [ -z "$line" ] && continue
-                    render_line "$line"
-                done
-                break
+                local last_line
+                last_line=$(tail -n 1 "$status_file")
+                local last_status
+                last_status=$(echo "$last_line" | jq -r '.status // empty' 2>/dev/null)
+                if [ "$last_status" = "done" ] || [ "$last_status" = "error" ]; then
+                    render_line "$last_line"
+                    break
+                fi
+                start_lines="$current_lines"
             fi
             if [ "$timeout_seconds" -gt 0 ]; then
                 local now
@@ -2611,6 +2615,9 @@ case "${1:-}" in
     "review-loop")
         review_loop
         ;;
+    "reboot")
+        reboot_sessions "${@:2}"
+        ;;
     "ls"|"list")
         if [ "${2:-}" = "--full" ] || [ "${2:-}" = "--tree" ]; then
             list_projects 1
@@ -2649,6 +2656,7 @@ case "${1:-}" in
         echo "  dev requirements <session>    View/set session requirements/notes"
         echo "  dev review <session>          Show completion status + git log/diff"
         echo "  dev review-loop               Print PM review loop checklist"
+        echo "  dev reboot [--dry-run]        Recreate baseline sessions after reboot"
         echo ""
         echo "Examples:"
         echo "  dev hub                       # root session at ~/projects"
@@ -2673,6 +2681,8 @@ case "${1:-}" in
         echo "  dev review-loop                          # print PM review loop"
         echo "  dev review replay/main/pi               # status + log/diff summary"
         echo "  dev queue-status replay/main -m -d       # inspect pending/dead messages"
+        echo "  dev reboot --dry-run                     # show sessions to recreate"
+        echo "  dev reboot                               # recreate baseline sessions"
         echo ""
         echo "Reminder: Read the last agent message before nudging:"
         echo "  dev pi-status <session> --messages 1"
